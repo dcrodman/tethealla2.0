@@ -9,6 +9,7 @@ set(ENCRYPTION_SOURCES
 	${ENC_DR}/psogc-crypt.c
 	${ENC_DR}/psopc-crypt.c
 	${ENC_DR}/encryption.c
+    ${ENC_DR}/encryption.h
 	)
 
 add_library(tethealla STATIC ${ENCRYPTION_SOURCES})
