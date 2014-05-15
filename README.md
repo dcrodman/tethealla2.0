@@ -12,11 +12,12 @@ can be used to generate project files for an IDE (I'm using Xcode) or to generat
 which can be compiled using GNU Make. 
 
 To build from source:
-git clone ...
-cd tethealla2.0
-mkdir build
-cd build
-cmake .. # you can add -G to specify your generator
+
+    git clone ...
+    cd tethealla2.0  
+    mkdir build  
+    cd build  
+    cmake .. # you can add -G to specify your generator  
 
 From there you can either run make to build everything or use whatever application you
 generated the build files for. You should see one library (libtethealla.a) and (eventually)
