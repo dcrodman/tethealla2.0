@@ -31,7 +31,8 @@
 #include <sys/socket.h>
 
 extern "C" {
- #include "encryption.h"
+    #include "encryption.h"
+    #include "mtwist.h"
 }
 
 #define BB_WELCOME_LENGTH 0x04C

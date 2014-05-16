@@ -37,7 +37,6 @@
 #include <unistd.h>
 
 #include "patch_server.h"
-#include "mtwist.h"
 
 const bool DEBUGGING = true;
 
@@ -137,10 +136,8 @@ patch_client* accept_client(int sockfd) {
     uint32_t client_seed_dc, server_seed_dc;
     uint8_t client_seed_bb[48], server_seed_bb[48];
     for(int i = 0; i < 48; i += 4) {
-        //client_seed_dc = genrand_int32();
-        client_seed_dc = 22284831;
-        //server_seed_dc = genrand_int32();
-        server_seed_dc = 23948292;
+        client_seed_dc = genrand_int32();
+        server_seed_dc = genrand_int32();
         
         client_seed_bb[i + 0] = (uint8_t)(client_seed_dc >>  0);
         client_seed_bb[i + 1] = (uint8_t)(client_seed_dc >>  8);
