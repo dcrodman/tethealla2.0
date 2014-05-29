@@ -93,6 +93,42 @@ bool send_welcome_ack(patch_client* client) {
     return send_packet(client);
 }
 
+/* In order to get here, the client must have sent us packet 0x04 containing
+ the login information of the client. At this point I don't care whether or
+ not the client has a valid username and password since we're just patching
+ their PSOBB client and not accessing account information, so I'm going to
+ ignore it for now and respond with the subsequent 0x13 packet (patch server
+ welcome message visible to the user). */
+bool send_welcome_message(patch_client *client, packet_hdr *header,
+        const char* msg, uint32_t size) {
+
+    //login_packet *pkt = (login_packet*) (client->send_buffer + sizeof(packet_hdr));
+    memset(client->send_buffer, 0, TCP_BUFFER_SIZE);
+
+    uint8_t header_size = sizeof(packet_hdr);
+    memcpy(client->send_buffer + header_size, msg, size);
+
+    // Pad with 0s until packet length is a mutliple of 4 (we've already
+    // 0'd out the buffer, so we just need to make sure the packet size
+    // is correct.
+    uint16_t pkt_size = header_size + size;
+    while (pkt_size % 4)
+        pkt_size++;
+
+    packet_hdr *pkt_hdr = (packet_hdr*) client->send_buffer;
+    pkt_hdr->pkt_type = LE16(PATCH_WELCOME_MSG);
+    pkt_hdr->pkt_len = LE16(pkt_size);
+    client->send_size = pkt_size;
+
+    printf("Welcome Message Packet: \n");
+    print_payload(client->send_buffer, pkt_size);
+    printf("\n");
+
+    CRYPT_CryptData(&client->server_cipher, &client->send_buffer, pkt_size, 1);
+
+    return send_packet(client);
+}
+
 void print_hex_ascii_line(const u_char *payload, int len, int offset) {
 
 	int i;

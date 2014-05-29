@@ -36,6 +36,13 @@ extern "C" {
 
 const int TCP_BUFFER_SIZE = 65530;
 
+/* Structure for holding the configuration data specified by the
+ user. */
+struct patch_config {
+    const char *welcome_message;
+    uint32_t welcome_size;
+};
+
 /* Structure for representing connected clients. */
 struct patch_client {
     int socket;

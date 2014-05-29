@@ -47,22 +47,33 @@ const int BACKLOG = 10;
 const char *PATCH_PORT = "11000";
 const char *DATA_PORT = "11001";
 
-std::list<patch_client*> client_connections;
+// Global list of connected clients for the PATCH portion.
+std::list<patch_client*> patch_connections;
+std::list<patch_client*> data_connections;
 
 std::mt19937 rand_gen(time(NULL));
 std::uniform_int_distribution<uint32_t> dist(0, UINT32_MAX);
 
+// Global configuration file populated by load_config().
+patch_config *server_config;
+
 /* Process a received packet from a client and dispatch it to
  the correct handler. */
-int process_packet(patch_client *client) {
+int patch_process_packet(patch_client *client) {
     packet_hdr *header = (packet_hdr*) client->recv_buffer;
     header->pkt_type = LE16(header->pkt_type);
     header->pkt_len = LE16(header->pkt_len);
-    printf("Length: %u, Type: %u\n", header->pkt_len, header->pkt_type);
+    printf("Length: %u, Type: %u\n\n", header->pkt_len, header->pkt_type);
 
     switch (header->pkt_type) {
         case BB_WELCOME_ACK:
             if (send_welcome_ack(client))
+                return 0;
+            else
+                return -1;
+        case BB_PATCH_LOGIN:
+            if (send_welcome_message(client, header,
+                    server_config->welcome_message, server_config->welcome_size))
                 return 0;
             else
                 return -1;
@@ -74,16 +85,18 @@ int process_packet(patch_client *client) {
 
 /* Read in whatever a client is trying to send us and store it in their
  respective receiving buffer and pass it along to the packet handler for
- as response. */
+ a response. Returns 0 on successful read, -1 on error, or 1 if the client
+ closed the connection. */
 int receive_from_client(patch_client *client) {
     
     printf("Receiving from %s\n", client->ip_addr_str);
     size_t bytes = recv(client->socket, &client->recv_buffer, TCP_BUFFER_SIZE, 0);
-    printf("Got %lu bytes\n", bytes);
     
     CRYPT_CryptData(&client->client_cipher, &client->recv_buffer, bytes, 0);
     print_payload(client->recv_buffer, int(bytes));
-    process_packet(client);
+
+    // TODO: Figure out whether PATCH or DATA needs to handle it.
+    patch_process_packet(client);
     
     return 0;
 }
@@ -139,7 +152,7 @@ patch_client* accept_client(int sockfd) {
     without the client receiving this packet, so it's all or nothing. */
     if (send_welcome(client, client_seed, server_seed)) {
         // Add them to our list of currently connected clients.
-        client_connections.push_front(client);
+        patch_connections.push_front(client);
         return client;
     }
     else
@@ -232,7 +245,7 @@ void handle_connections(int patchfd, int datafd) {
             
             // Iterate over the connected clients.
             std::list<patch_client*>::const_iterator iterator, end;
-            for (iterator = client_connections.begin(), end = client_connections.end(); iterator != end; ++iterator) {
+            for (iterator = patch_connections.begin(), end = patch_connections.end(); iterator != end; ++iterator) {
                 printf("Checking client %s\n", (*iterator)->ip_addr_str);
 
                 if (FD_ISSET((*iterator)->socket, &readfds)) {
@@ -242,7 +255,7 @@ void handle_connections(int patchfd, int datafd) {
                     /*
                     printf("Closing connection with client %s\n", (*iterator)->ip_addr_str);
                     close((*iterator)->socket);
-                    client_connections.erase(iterator);
+                    patch_connections.erase(iterator);
                     FD_CLR((*iterator)->socket, &master);
                     fd_max = datafd;
                      */
@@ -261,6 +274,18 @@ void handle_connections(int patchfd, int datafd) {
     }
 }
 
+/* Load/prepare configuration file with data set by the server admin. It uses a global
+ configuration and it's bad, but at least it should never be modified. */
+void load_config() {
+    server_config = (patch_config*) malloc(sizeof(patch_config));
+    memset(server_config, 0, sizeof(patch_config));
+
+    // TODO: Read in welcome message
+
+    server_config->welcome_message = "Tethealla2.0 Welcome Message";
+    server_config->welcome_size = strlen(server_config->welcome_message);
+}
+
 int main(int argc, const char * argv[]) {
     addrinfo hints;
     hints.ai_flags = AI_PASSIVE;
@@ -274,6 +299,7 @@ int main(int argc, const char * argv[]) {
     int data_sockfd = create_socket(DATA_PORT, &hints);
     printf("OK\n");
     
+    load_config();
     handle_connections(patch_sockfd, data_sockfd);
 
     return 0;

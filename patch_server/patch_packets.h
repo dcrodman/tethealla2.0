@@ -30,6 +30,8 @@
 #define BB_WELCOME_LENGTH 0x04C
 #define BB_WELCOME_TYPE 0x02
 #define BB_WELCOME_ACK 0x02
+#define BB_PATCH_LOGIN 0x04
+#define PATCH_WELCOME_MSG 0x13
 
 #include <cstdint>
 #include <sys/socket.h>
@@ -65,9 +67,9 @@ struct welcome_packet {
     uint32_t client_vector;
 };
 
-/* The Login packet which contains the user's username/password. */
+/* The Login packet which contains the user's username/password. (Sylverant) */
 struct login_packet {
-    packet_hdr hdr;
+    packet_hdr header;
     uint8_t padding1[12];    /* All zeroes */
     char username[16];
     char password[16];
@@ -80,5 +82,7 @@ void print_payload(const u_char *payload, int len);
 bool send_packet(patch_client* client);
 bool send_welcome(patch_client* client, uint32_t cvector, uint32_t svector);
 bool send_welcome_ack(patch_client* client);
+bool send_welcome_message(patch_client *client, packet_hdr *header,
+    const char* msg, uint32_t size);
 
 #endif
