@@ -26,9 +26,11 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstdint>
 #include <cerrno>
 #include <iostream>
 #include <list>
+#include <random>
 
 #include <arpa/inet.h>
 #include <sys/types.h>
@@ -37,8 +39,7 @@
 #include <unistd.h>
 
 #include "patch_server.h"
-
-const bool DEBUGGING = true;
+#include "patch_packets.h"
 
 // Allowed number of pending connections.
 const int BACKLOG = 10;
@@ -48,64 +49,59 @@ const char *DATA_PORT = "11001";
 
 std::list<patch_client*> client_connections;
 
-void destory_client(patch_client* client);
+std::mt19937 rand_gen(time(NULL));
+std::uniform_int_distribution<uint32_t> dist(0, UINT32_MAX);
 
-/* Send the packet from the client's send buffer to the client. Will try
- until the entire packet is sent. The client's send buffer will be freed.*/
-bool send_packet(patch_client* client, int length) {
-    int total = 0, remaining = length;
-    int bytes_sent;
+/* Process a received packet from a client and dispatch it to
+ the correct handler. */
+int process_packet(patch_client *client) {
+    packet_hdr *header = (packet_hdr*) client->recv_buffer;
+    header->pkt_type = LE16(header->pkt_type);
+    header->pkt_len = LE16(header->pkt_len);
+    printf("Length: %u, Type: %u\n", header->pkt_len, header->pkt_type);
 
-    while (total < length) {
-        bytes_sent = send(client->socket, client->send_buffer + total, remaining, 0);
-
-        if (total == -1) {
-            perror("send");
-            destory_client(client);
-            return false;
-        }
-        total += bytes_sent;
-        remaining -= bytes_sent;
+    switch (header->pkt_type) {
+        case BB_WELCOME_ACK:
+            if (send_welcome_ack(client))
+                return 0;
+            else
+                return -1;
+        default:
+            return -2;
     }
-    return true;
+    return 0;
 }
 
-/* Send the BB welcome packet. */
-bool send_welcome(patch_client* client, u_int8_t cvector[48], u_int8_t svector[48]) {
-    printf("send_welcome: Sending welcome packet to client %d\n", client->socket);
-    welcome_packet *w_pkt = (welcome_packet*) malloc(sizeof(welcome_packet));
-    memset(&w_pkt, 0, sizeof(welcome_packet));
+/* Read in whatever a client is trying to send us and store it in their
+ respective receiving buffer and pass it along to the packet handler for
+ as response. */
+int receive_from_client(patch_client *client) {
+    
+    printf("Receiving from %s\n", client->ip_addr_str);
+    size_t bytes = recv(client->socket, &client->recv_buffer, TCP_BUFFER_SIZE, 0);
+    printf("Got %lu bytes\n", bytes);
+    
+    CRYPT_CryptData(&client->client_cipher, &client->recv_buffer, bytes, 0);
+    print_payload(client->recv_buffer, int(bytes));
+    process_packet(client);
+    
+    return 0;
+}
 
-    w_pkt->header.pkt_len = htons(BB_WELCOME_LENGTH);
-    w_pkt->header.pkt_type = htons(BB_WELCOME_TYPE);
-    
-    memcpy(w_pkt->copyright, copyright_message, 44);
-    memcpy(w_pkt->client_vector, cvector, 48);
-    memcpy(w_pkt->server_vector, svector, 48);
-    
-    client->send_buffer = (unsigned char*) w_pkt;
-    
-    if (DEBUGGING) {
-        printf("Sending welcome packet to %s\n", client->ip_addr_str);
-        //display_packet(client->send_buffer, BB_WELCOME_LENGTH);
-    }
-
-    if (!send_packet(client, BB_WELCOME_LENGTH)) {
-        perror("send");
-        destory_client(client);
-        return false;
-    }
-    return true;
+/* Disconnect a client, remove it from the list of client connections
+ and free the memory associated with the structure.*/
+void destory_client(patch_client* client) {
+    free(client->ip_addr_str);
+    close(client->socket);
 }
 
 /* Accept a new client connection, initialize the encryption for
  the session and send them the welcome packet. If the welcome packet
  fails, return NULL as the client will have been disconnected. */
 patch_client* accept_client(int sockfd) {
-    printf("accept_client: Creating client connection\n");
     sockaddr_storage clientaddr;
     socklen_t addrsize = sizeof clientaddr;
-    patch_client* client = (patch_client*) calloc(1, sizeof(patch_client));
+    patch_client* client = (patch_client*) malloc(sizeof(patch_client));
     
     int clientfd;
     if ((clientfd = accept(sockfd, (struct sockaddr*) &clientaddr, &addrsize)) == -1) {
@@ -131,44 +127,23 @@ patch_client* accept_client(int sockfd) {
         inet_ntop(AF_INET6, &(ip->sin6_addr), client->ip_addr_str, INET6_ADDRSTRLEN);
     }
     
-    /* Generate the encryption keys for the client and server. Shamelessly
-     stolen from Sylverant, thank you Lawrence! */
-    uint32_t client_seed_dc, server_seed_dc;
-    uint8_t client_seed_bb[48], server_seed_bb[48];
-    for(int i = 0; i < 48; i += 4) {
-        client_seed_dc = genrand_int32();
-        server_seed_dc = genrand_int32();
-        
-        client_seed_bb[i + 0] = (uint8_t)(client_seed_dc >>  0);
-        client_seed_bb[i + 1] = (uint8_t)(client_seed_dc >>  8);
-        client_seed_bb[i + 2] = (uint8_t)(client_seed_dc >> 16);
-        client_seed_bb[i + 3] = (uint8_t)(client_seed_dc >> 24);
-        server_seed_bb[i + 0] = (uint8_t)(server_seed_dc >>  0);
-        server_seed_bb[i + 1] = (uint8_t)(server_seed_dc >>  8);
-        server_seed_bb[i + 2] = (uint8_t)(server_seed_dc >> 16);
-        server_seed_bb[i + 3] = (uint8_t)(server_seed_dc >> 24);
-    }
-    
-    CRYPT_CreateKeys(&client->server_cipher, server_seed_bb, CRYPT_BLUEBURST);
-    CRYPT_CreateKeys(&client->client_cipher, client_seed_bb, CRYPT_BLUEBURST);
-    
-    // Add them to our list of currently connected clients.
-    client_connections.push_front(client);
+    /* Generate the encryption keys for the client and server.*/
+    uint32_t client_seed = dist(rand_gen);
+    uint32_t server_seed = dist(rand_gen);
+
+    CRYPT_CreateKeys(&client->server_cipher, &server_seed, CRYPT_PC);
+    CRYPT_CreateKeys(&client->client_cipher, &client_seed, CRYPT_PC);
     
     /* At this point I really only care about the BlueBurst client, otherwise there would
     be a condition here to check for the type of client. The connection can't continue
     without the client receiving this packet, so it's all or nothing. */
-    if (send_welcome(client, client_seed_bb, server_seed_bb))
+    if (send_welcome(client, client_seed, server_seed)) {
+        // Add them to our list of currently connected clients.
+        client_connections.push_front(client);
         return client;
+    }
     else
         return NULL;
-}
-
-/* Disconnect a client, remove it from the list of client connections
- and free the memory associated with the structure.*/
-void destory_client(patch_client* client) {
-    // free ip
-    // close socket
 }
 
 /* Create and open a server socket to start listening on a particular port.
@@ -221,57 +196,67 @@ int create_socket(const char* port, const addrinfo *hints) {
 void handle_connections(int patchfd, int datafd) {
     fd_set readfds, writefds, master;
     int fd_max = (patchfd > datafd) ? patchfd : datafd;
+    int select_result = 0;
+    
+    timeval timeout = { .tv_sec = 10 };
     
     FD_ZERO(&master);
-    
-    FD_ZERO(&readfds);
-    FD_SET(patchfd, &readfds);
-    FD_SET(datafd, &readfds);
     FD_SET(patchfd, &master);
     FD_SET(datafd, &master);
     
+    FD_ZERO(&readfds);
+    FD_ZERO(&writefds);
+
     while (1) {
-        // Copy the master set since select will modify read and write fd_sets
         readfds = master;
-        writefds = master;
-        if (select(fd_max + 1, &readfds, NULL, NULL, NULL) == -1) {
-            perror("select");
-            exit(5);
-        }
-        
-        for (int i = 0; i < fd_max; i++) {
-            if (FD_ISSET(i, &readfds)) {
-                if (i == patchfd) {
-                    // New connection to PATCH port
-                    printf("Accepting connection to PATCH...\n");
-                    patch_client *client = accept_client(patchfd);
-                    if (client)
-                        FD_SET(client->socket, &master);
-                    fd_max = (client->socket > fd_max) ? client->socket : fd_max;
-                } else if (i == datafd) {
-                    // New connection to DATA port
-                    printf("Accepting connection to DATA...\n");
-                    patch_client *client = accept_client(datafd);
-                    if (client)
-                        FD_SET(client->socket, &master);
-                    fd_max = (client->socket > fd_max) ? client->socket : fd_max;
-                } else {
-                    // Handle data from the client
-                    // remove client from master if recv = 0 & destroy
-                    unsigned char rcvbuf[2048];
-                    size_t bytes = recv(i, &rcvbuf, sizeof(rcvbuf), 0);
-                    //display_packet(rcvbuf, (int)bytes);
-                    printf("Client closed connection.\n");
-                    close(i);
-                }
+
+        printf("fd_max: %d\n", fd_max);
+        if ((select_result = select(fd_max + 1, &readfds, &writefds, NULL, &timeout))) {
+            // Check the sockets listening for new connections.
+            if (FD_ISSET(patchfd, &readfds)) {
+                // New connection to PATCH port
+                printf("Accepting connection to PATCH...\n");
+                patch_client *client = accept_client(patchfd);
+                if (client)
+                    FD_SET(client->socket, &master);
+                fd_max = (client->socket > fd_max) ? client->socket : fd_max;
+            }
+            if (FD_ISSET(datafd, &readfds)) {
+                // New connection to DATA port
+                printf("Accepting connection to DATA...\n");
+                patch_client *client = accept_client(datafd);
+                if (client)
+                    FD_SET(client->socket, &master);
+                fd_max = (client->socket > fd_max) ? client->socket : fd_max;
             }
             
+            // Iterate over the connected clients.
             std::list<patch_client*>::const_iterator iterator, end;
             for (iterator = client_connections.begin(), end = client_connections.end(); iterator != end; ++iterator) {
+                printf("Checking client %s\n", (*iterator)->ip_addr_str);
+
+                if (FD_ISSET((*iterator)->socket, &readfds)) {
+                    // Handle data from the client
+                    // remove client from master if recv = 0 & destroy & select new max
+                    receive_from_client((*iterator));
+                    /*
+                    printf("Closing connection with client %s\n", (*iterator)->ip_addr_str);
+                    close((*iterator)->socket);
+                    client_connections.erase(iterator);
+                    FD_CLR((*iterator)->socket, &master);
+                    fd_max = datafd;
+                     */
+                }
                 if (FD_ISSET((*iterator)->socket, &writefds)) {
-                    printf("Could send something...");
+                    printf("Could send something to %d\n", (*iterator)->socket);
                 }
             }
+
+        } else if (select_result == -1) {
+            perror("select");
+            exit(5);
+        } else {
+            // We timed out.
         }
     }
 }

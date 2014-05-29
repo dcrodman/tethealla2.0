@@ -32,39 +32,9 @@
 
 extern "C" {
     #include "encryption.h"
-    #include "mtwist.h"
 }
 
-#define BB_WELCOME_LENGTH 0x04C
-#define BB_WELCOME_TYPE 0x02
-
-const static char copyright_message[] = {
-    "Patch Server. Copyright SonicTeam, LTD. 2001"
-};
-
-/* 8-byte header included with all packets sent by PSOBB. */
-struct packet_hdr {
-    u_short pkt_len;
-    u_short pkt_type;
-};
-
-/* Welcome packet sent by the server to the client after connecting. */
-struct welcome_packet {
-    packet_hdr header;
-    char copyright[44];
-    uint8_t padding[20];     /* All zeroes */
-    u_int8_t server_vector[48];
-    u_int8_t client_vector[48];
-};
-
-/* The Login packet which contains the user's username/password. */
-struct login_packet {
-    packet_hdr hdr;
-    uint8_t padding1[12];    /* All zeroes */
-    char username[16];
-    char password[16];
-    uint8_t padding2[64];    /* All zeroes */
-};
+const int TCP_BUFFER_SIZE = 65530;
 
 /* Structure for representing connected clients. */
 struct patch_client {
@@ -78,8 +48,12 @@ struct patch_client {
     CRYPT_SETUP client_cipher;
     CRYPT_SETUP server_cipher;
     
-    unsigned char *send_buffer;
-    unsigned char *receive_buffer;
+    unsigned char send_buffer[TCP_BUFFER_SIZE];
+    unsigned int send_size;
+    unsigned char recv_buffer[TCP_BUFFER_SIZE];
+    unsigned int recv_size;
 };
+
+const bool DEBUGGING = true;
 
 #endif
