@@ -38,6 +38,8 @@
 #include <netdb.h>
 #include <unistd.h>
 
+#include <iconv.h>
+
 #include "patch_server.h"
 #include "patch_packets.h"
 
@@ -280,10 +282,29 @@ void load_config() {
     server_config = (patch_config*) malloc(sizeof(patch_config));
     memset(server_config, 0, sizeof(patch_config));
 
-    // TODO: Read in welcome message
+    char *welcome_message = (char*) malloc(1024);
+    memcpy(welcome_message, "Tethealla2.0 Welcome Message", 29);
+    size_t inbytes = (size_t) strlen(welcome_message) + 1;
 
-    server_config->welcome_message = "Tethealla2.0 Welcome Message";
-    server_config->welcome_size = strlen(server_config->welcome_message);
+    // The Welcome Message sent in PATCH_WELCOME_MESSAGE is expected to be encoded
+    // as UTF-16 little endian, so it needs to be converted.
+    iconv_t conv = iconv_open("UTF-16LE", "UTF-8");
+    if (conv == (iconv_t)-1) {
+        perror("load_config:iconv_open");
+        exit(1);
+    }
+
+    size_t outbytes = inbytes * 2;
+    char *outbuf = (char*) malloc(outbytes);
+
+    if (iconv(conv, &welcome_message, &inbytes, &outbuf, &outbytes) == (size_t)-1) {
+        perror("load_config:iconv");
+        exit(1);
+    }
+    iconv_close(conv);
+
+    //server_config->welcome_message = "Tethealla2.0 Welcome Message";
+    //server_config->welcome_size = strlen(server_config->welcome_message);
 }
 
 int main(int argc, const char * argv[]) {
