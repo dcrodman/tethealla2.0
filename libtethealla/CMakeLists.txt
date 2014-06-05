@@ -13,6 +13,11 @@ set(ENCRYPTION_SOURCES
     ${INCL_DR}/encryption.h
 	)
 
+set (SNIFFEX_SOURCES
+	sniffex/sniffex.c
+    ${INCL_DR}/sniffex.h
+	)
+
 # Export this directory to the parent scope so that other binaries
 # in the project can be built individually and include this library.
 set(LIBTETHEALLA_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/${INCL_DR})
@@ -22,5 +27,5 @@ if (TARGET tethealla)
 	message('libtethealla is already defined.')
 else(TARGET tethealla)
 	include_directories(${LIBTETHEALLA_INCLUDE_DIR})
-	add_library(tethealla STATIC ${ENCRYPTION_SOURCES})
+	add_library(tethealla STATIC ${ENCRYPTION_SOURCES} ${SNIFFEX_SOURCES})
 endif(TARGET tethealla)
