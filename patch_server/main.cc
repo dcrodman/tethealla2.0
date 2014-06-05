@@ -282,10 +282,6 @@ void load_config() {
     server_config = (patch_config*) malloc(sizeof(patch_config));
     memset(server_config, 0, sizeof(patch_config));
 
-    char *welcome_message = (char*) malloc(1024);
-    memcpy(welcome_message, "Tethealla2.0 Welcome Message", 29);
-    size_t inbytes = (size_t) strlen(welcome_message) + 1;
-
     // The Welcome Message sent in PATCH_WELCOME_MESSAGE is expected to be encoded
     // as UTF-16 little endian, so it needs to be converted.
     iconv_t conv = iconv_open("UTF-16LE", "UTF-8");
@@ -294,17 +290,23 @@ void load_config() {
         exit(1);
     }
 
-    size_t outbytes = inbytes * 2;
-    char *outbuf = (char*) malloc(outbytes);
+    // Grab our welcome message. Hardcoded for now.
+    char welcome_message[] = "Tethealla2.0 Welcome Message";
+    char *inbuf = welcome_message;
+    size_t inbytes = (size_t) strlen(welcome_message);
 
-    if (iconv(conv, &welcome_message, &inbytes, &outbuf, &outbytes) == (size_t)-1) {
+    size_t outbytes = inbytes * 2, avail = outbytes;
+    char *outbuf = (char*) malloc(outbytes), *outptr = outbuf;
+    memset(outbuf, 0, outbytes);
+
+    if (iconv(conv, &inbuf, &inbytes, &outptr, &avail) == (size_t)-1) {
         perror("load_config:iconv");
         exit(1);
     }
     iconv_close(conv);
 
-    //server_config->welcome_message = "Tethealla2.0 Welcome Message";
-    //server_config->welcome_size = strlen(server_config->welcome_message);
+    server_config->welcome_message = outbuf;
+    server_config->welcome_size = outbytes;
 }
 
 int main(int argc, const char * argv[]) {
