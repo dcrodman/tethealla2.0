@@ -20,4 +20,9 @@ else (ICONV_FOUND)
 		" and accessible in your system's include directories.")
 endif (ICONV_FOUND)
 
+# Allow patch_server to be built by itself by including the exported
+# LIBTETHEALLA_INCLUDE_DIR from the libtethealla CMakeLists.
+add_subdirectory(./../libtethealla tethealla)
+include_directories(${LIBTETHEALLA_INCLUDE_DIR})
+
 target_link_libraries(patch_server tethealla)

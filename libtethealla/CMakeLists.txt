@@ -13,4 +13,14 @@ set(ENCRYPTION_SOURCES
     ${INCL_DR}/encryption.h
 	)
 
-add_library(tethealla STATIC ${ENCRYPTION_SOURCES})
+# Export this directory to the parent scope so that other binaries
+# in the project can be built individually and include this library.
+set(LIBTETHEALLA_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/${INCL_DR})
+set(LIBTETHEALLA_INCLUDE_DIR ${SHARED_LIB_INCLUDE_DIR} PARENT_SCOPE)
+
+if (TARGET tethealla)
+	message('libtethealla is already defined.')
+else(TARGET tethealla)
+	include_directories(${LIBTETHEALLA_INCLUDE_DIR})
+	add_library(tethealla STATIC ${ENCRYPTION_SOURCES})
+endif(TARGET tethealla)
