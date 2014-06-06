@@ -32,6 +32,7 @@
 
 extern "C" {
     #include "encryption.h"
+    #include "sniffex.h"
 }
 
 const int TCP_BUFFER_SIZE = 65530;
@@ -39,6 +40,8 @@ const int TCP_BUFFER_SIZE = 65530;
 /* Structure for holding the configuration data specified by the
  user. */
 struct patch_config {
+    u_char serverIP[4];
+
     const char *welcome_message;
     uint32_t welcome_size;
 };
