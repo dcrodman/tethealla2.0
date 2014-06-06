@@ -40,7 +40,8 @@ const int TCP_BUFFER_SIZE = 65530;
 /* Structure for holding the configuration data specified by the
  user. */
 struct patch_config {
-    u_char serverIP[4];
+    char *serverIPStr;
+    uint32_t serverIP;
 
     const char *welcome_message;
     uint32_t welcome_size;
@@ -62,6 +63,8 @@ struct patch_client {
     unsigned int send_size;
     unsigned char recv_buffer[TCP_BUFFER_SIZE];
     unsigned int recv_size;
+
+    bool disconnected;
 };
 
 const bool DEBUGGING = true;

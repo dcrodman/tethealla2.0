@@ -34,18 +34,13 @@ extern "C" {
 }
 
 /* Send the packet from the client's send buffer to the client. Will try
- until the entire packet is sent. */
+ until the entire packet is sent. Note that client->send_size must be
+ set to the expected length of the packet. */
 bool send_packet(patch_client* client) {
 
     uint32_t length = client->send_size;
-    printf("send_packet; length: %d\n", length);
     int total = 0, remaining = length;
     int bytes_sent;
-
-    if (DEBUGGING) {
-        printf("Sending to %s: \n", client->ip_addr_str);
-        print_payload(client->send_buffer, length);
-    }
 
     while (total < length) {
         bytes_sent = send(client->socket, client->send_buffer + total, remaining, 0);

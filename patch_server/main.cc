@@ -59,6 +59,8 @@ std::uniform_int_distribution<uint32_t> dist(0, UINT32_MAX);
 // Global configuration file populated by load_config().
 patch_config *server_config;
 
+void destory_client(patch_client* client);
+
 /* Process a received packet from a client and dispatch it to
  the correct handler. */
 int patch_process_packet(patch_client *client) {
@@ -124,6 +126,7 @@ patch_client* accept_client(int sockfd) {
         return NULL;
     }
     client->socket = clientfd;
+    client->disconnected = false;
 
     // IPv6?
     if (clientaddr.ss_family == AF_INET) {
@@ -159,52 +162,6 @@ patch_client* accept_client(int sockfd) {
     }
     else
         return NULL;
-}
-
-/* Create and open a server socket to start listening on a particular port.
- Args:
-    port: Port on which to listen.
-    hints: Populated struct for getaddrinfo.
-*/
-int create_socket(const char* port, const addrinfo *hints) {
-    char c;
-    int status = 0, sockfd;
-    addrinfo *server;
-    
-    if ((status = getaddrinfo(NULL, port, hints, &server)) != 0) {
-        printf("getaddrinfo(): %s\n", gai_strerror(status));
-        printf("Press any key to exit.");
-        gets(&c);
-        exit(1);
-    }
-    
-    if ((sockfd = socket(server->ai_family, server->ai_socktype, server->ai_protocol)) == -1) {
-        printf("socket(): ");
-        printf("Press any key to exit.");
-        gets(&c);
-        exit(2);
-    }
-    
-    // Avoid "Address already in use" condition/error.
-    int yes = 1;
-    setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
-    
-    if (bind(sockfd, (sockaddr*)server->ai_addr, server->ai_addrlen) == -1) {
-        close(sockfd);
-        perror("bind");
-        gets(&c);
-        exit(3);
-    }
-    
-    if (listen(sockfd, BACKLOG) == -1) {
-        close(sockfd);
-        perror("listen");
-        gets(&c);
-        exit(4);
-    }
-
-    freeaddrinfo(server);
-    return sockfd;
 }
 
 /* Handle incoming connections to both the PATCH and DATA portions. */
@@ -282,6 +239,10 @@ void load_config() {
     server_config = (patch_config*) malloc(sizeof(patch_config));
     memset(server_config, 0, sizeof(patch_config));
 
+    // Handle the server's IP address, needed for binding and packet 0x14.
+    server_config->serverIPStr = "10.0.1.22";
+    server_config->serverIP = inet_addr(server_config->serverIPStr);
+
     // The Welcome Message sent in PATCH_WELCOME_MESSAGE is expected to be encoded
     // as UTF-16 little endian, so it needs to be converted.
     iconv_t conv = iconv_open("UTF-16LE", "UTF-8");
@@ -309,21 +270,71 @@ void load_config() {
     server_config->welcome_size = outbytes;
 }
 
+/* Create and open a server socket to start listening on a particular port.
+ Args:
+ port: Port on which to listen.
+ hints: Populated struct for getaddrinfo.
+ */
+int create_socket(const char* port, const addrinfo *hints) {
+    char c;
+    int status = 0, sockfd;
+    addrinfo *server;
+
+    if ((status = getaddrinfo(server_config->serverIPStr, port, hints, &server)) != 0) {
+        printf("getaddrinfo(): %s\n", gai_strerror(status));
+        printf("Press any key to exit.\n");
+        gets(&c);
+        exit(1);
+    }
+
+    if ((sockfd = socket(server->ai_family, server->ai_socktype, server->ai_protocol)) == -1) {
+        printf("socket(): ");
+        printf("Press any key to exit.\n");
+        gets(&c);
+        exit(2);
+    }
+
+    // Avoid "Address already in use" condition/error.
+    int yes = 1;
+    setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
+
+    if (bind(sockfd, (sockaddr*)server->ai_addr, server->ai_addrlen) == -1) {
+        close(sockfd);
+        perror("bind");
+        gets(&c);
+        exit(3);
+    }
+
+    if (listen(sockfd, BACKLOG) == -1) {
+        close(sockfd);
+        perror("listen");
+        gets(&c);
+        exit(4);
+    }
+
+    freeaddrinfo(server);
+    return sockfd;
+}
+
 int main(int argc, const char * argv[]) {
+
+    load_config();
+
     addrinfo hints;
-    hints.ai_flags = AI_PASSIVE;
+    hints.ai_flags = AI_NUMERICHOST;
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
-    
+
     printf("Opening PATCH socket on port %s...", PATCH_PORT);
     int patch_sockfd = create_socket(PATCH_PORT, &hints);
     printf("OK\nOpening DATA socket on port %s...", DATA_PORT);
     int data_sockfd = create_socket(DATA_PORT, &hints);
     printf("OK\n");
     
-    load_config();
     handle_connections(patch_sockfd, data_sockfd);
+
+    free(server_config);
 
     return 0;
 }
