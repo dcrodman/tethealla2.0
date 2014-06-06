@@ -69,38 +69,46 @@ int patch_process_packet(patch_client *client) {
     header->pkt_len = LE16(header->pkt_len);
     printf("Length: %u, Type: %u\n\n", header->pkt_len, header->pkt_type);
 
+    bool result;
     switch (header->pkt_type) {
         case BB_WELCOME_ACK:
-            if (send_welcome_ack(client))
-                return 0;
-            else
-                return -1;
+            result = (send_welcome_ack(client));
+            break;
         case BB_PATCH_LOGIN:
-            if (send_welcome_message(client, header,
-                    server_config->welcome_message, server_config->welcome_size))
-                return 0;
-            else
+            result = send_welcome_message(client, header,
+                    server_config->welcome_message, server_config->welcome_size);
+            if (!result)
                 return -1;
+            result = send_redirect(client, server_config->serverIP, htons(atoi(DATA_PORT)));
+            break;
         default:
             return -2;
     }
-    return 0;
+    return result;
 }
 
 /* Read in whatever a client is trying to send us and store it in their
  respective receiving buffer and pass it along to the packet handler for
  a response. Returns 0 on successful read, -1 on error, or 1 if the client
- closed the connection. */
+ closed the connection. Side effect: will close the socket if the client
+ disconnects. */
 int receive_from_client(patch_client *client) {
     
     printf("Receiving from %s\n", client->ip_addr_str);
     size_t bytes = recv(client->socket, &client->recv_buffer, TCP_BUFFER_SIZE, 0);
     
+    if (bytes == 0) {
+        client->disconnected = true;
+        close(client->socket);
+        return 1;
+    }
+
     CRYPT_CryptData(&client->client_cipher, &client->recv_buffer, bytes, 0);
     print_payload(client->recv_buffer, int(bytes));
 
     // TODO: Figure out whether PATCH or DATA needs to handle it.
     patch_process_packet(client);
+    memset(client->recv_buffer, 0, sizeof(client->recv_buffer));
     
     return 0;
 }
@@ -109,7 +117,6 @@ int receive_from_client(patch_client *client) {
  and free the memory associated with the structure.*/
 void destory_client(patch_client* client) {
     free(client->ip_addr_str);
-    close(client->socket);
 }
 
 /* Accept a new client connection, initialize the encryption for
@@ -182,7 +189,6 @@ void handle_connections(int patchfd, int datafd) {
     while (1) {
         readfds = master;
 
-        printf("fd_max: %d\n", fd_max);
         if ((select_result = select(fd_max + 1, &readfds, &writefds, NULL, &timeout))) {
             // Check the sockets listening for new connections.
             if (FD_ISSET(patchfd, &readfds)) {
@@ -208,16 +214,14 @@ void handle_connections(int patchfd, int datafd) {
                 printf("Checking client %s\n", (*iterator)->ip_addr_str);
 
                 if (FD_ISSET((*iterator)->socket, &readfds)) {
-                    // Handle data from the client
-                    // remove client from master if recv = 0 & destroy & select new max
-                    receive_from_client((*iterator));
-                    /*
-                    printf("Closing connection with client %s\n", (*iterator)->ip_addr_str);
-                    close((*iterator)->socket);
-                    patch_connections.erase(iterator);
-                    FD_CLR((*iterator)->socket, &master);
-                    fd_max = datafd;
-                     */
+                    if (receive_from_client((*iterator)) == 1) {
+                        printf("Closing connection with client %s\n", (*iterator)->ip_addr_str);
+                        FD_CLR((*iterator)->socket, &master);
+                        //patch_connections.erase(iterator);
+                        fd_max = datafd;
+                        //destory_client(*iterator);
+                        continue;
+                    }
                 }
                 if (FD_ISSET((*iterator)->socket, &writefds)) {
                     printf("Could send something to %d\n", (*iterator)->socket);
@@ -240,7 +244,7 @@ void load_config() {
     memset(server_config, 0, sizeof(patch_config));
 
     // Handle the server's IP address, needed for binding and packet 0x14.
-    server_config->serverIPStr = "10.0.1.22";
+    server_config->serverIPStr = "127.0.0.1";
     server_config->serverIP = inet_addr(server_config->serverIPStr);
 
     // The Welcome Message sent in PATCH_WELCOME_MESSAGE is expected to be encoded

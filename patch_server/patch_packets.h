@@ -32,6 +32,7 @@
 #define BB_WELCOME_ACK 0x02
 #define BB_PATCH_LOGIN 0x04
 #define PATCH_WELCOME_MSG 0x13
+#define PATCH_REDIRECT 0x14
 
 #include <cstdint>
 #include <sys/socket.h>
@@ -67,6 +68,14 @@ struct welcome_packet {
     uint32_t client_vector;
 };
 
+/* Redirect packet sent by PATCH with the IP & port of DATA. */
+struct redirect_packet {
+    packet_hdr header;
+    uint32_t dataIP;
+    uint16_t dataPort;
+    uint16_t padding;
+};
+
 /* The Login packet which contains the user's username/password. (Sylverant) */
 struct login_packet {
     packet_hdr header;
@@ -84,5 +93,6 @@ bool send_welcome(patch_client* client, uint32_t cvector, uint32_t svector);
 bool send_welcome_ack(patch_client* client);
 bool send_welcome_message(patch_client *client, packet_hdr *header,
     const char* msg, uint32_t size);
+bool send_redirect(patch_client* client, uint32_t serverIP, uint16_t serverPort);
 
 #endif

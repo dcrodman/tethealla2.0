@@ -91,6 +91,26 @@ bool send_welcome_ack(patch_client* client) {
     return send_packet(client);
 }
 
+// Send IP address and port # of the DATA portion of the patch server.
+bool send_redirect(patch_client* client, uint32_t serverIP, uint16_t serverPort) {
+    redirect_packet *pkt = (redirect_packet*) client->send_buffer;
+    pkt->header.pkt_type = PATCH_REDIRECT;
+    pkt->header.pkt_len = 0x0C;
+
+    pkt->dataIP = serverIP;
+    pkt->dataPort = serverPort;
+    pkt->padding = 0;
+
+    printf("Redirect packet\n");
+    print_payload(client->send_buffer, 0x0C);
+    printf("\n");
+
+    CRYPT_CryptData(&client->server_cipher, &client->send_buffer, 0x0C, 1);
+    client->send_size = 0x0C;
+
+    return send_packet(client);
+}
+
 /* In order to get here, the client must have sent us packet 0x04 containing
  the login information of the client. At this point I don't care whether or
  not the client has a valid username and password since we're just patching
