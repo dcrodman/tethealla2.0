@@ -34,6 +34,9 @@
 #define PATCH_WELCOME_MSG 0x13
 #define PATCH_REDIRECT 0x14
 
+#define DATA_WELCOME_ACK 0x0B
+#define DATA_FILES_DONE 0x12
+
 #include <cstdint>
 #include <sys/socket.h>
 
@@ -94,5 +97,8 @@ bool send_welcome_ack(patch_client* client);
 bool send_welcome_message(patch_client *client, packet_hdr *header,
     const char* msg, uint32_t size);
 bool send_redirect(patch_client* client, uint32_t serverIP, uint16_t serverPort);
+bool send_data_ack(patch_client* client);
+
+bool send_files_done(patch_client* client);
 
 #endif

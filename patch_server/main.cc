@@ -60,18 +60,17 @@ patch_config *server_config;
 
 void destory_client(patch_client* client);
 
-/* Process a received packet from a client and dispatch it to
- the correct handler. */
+/* Process a client packet sent to the PATCH server. */
 int patch_process_packet(patch_client *client) {
     packet_hdr *header = (packet_hdr*) client->recv_buffer;
     header->pkt_type = LE16(header->pkt_type);
     header->pkt_len = LE16(header->pkt_len);
-    printf("Length: %u, Type: %u\n\n", header->pkt_len, header->pkt_type);
+    printf("PATCH Length: %u, Type: %u\n\n", header->pkt_len, header->pkt_type);
 
     bool result;
     switch (header->pkt_type) {
         case BB_WELCOME_ACK:
-            result = (send_welcome_ack(client));
+            result = send_welcome_ack(client);
             break;
         case BB_PATCH_LOGIN:
             result = send_welcome_message(client, header,
@@ -82,6 +81,29 @@ int patch_process_packet(patch_client *client) {
             break;
         default:
             return -2;
+    }
+    return result;
+}
+
+/* Process a client packet sent to the DATA server. */
+int data_process_packet(patch_client *client) {
+    packet_hdr *header = (packet_hdr*) client->recv_buffer;
+    header->pkt_type = LE16(header->pkt_type);
+    header->pkt_len = LE16(header->pkt_len);
+    printf("DATA Length: %u, Type: %u\n\n", header->pkt_len, header->pkt_type);
+
+    bool result;
+    switch (header->pkt_type) {
+        case BB_WELCOME_ACK:
+            result = send_welcome_ack(client);
+            break;
+        case BB_PATCH_LOGIN:
+            result = send_data_ack(client);
+            send_files_done(client);
+            break;
+        default:
+            result = 0;
+            break;
     }
     return result;
 }

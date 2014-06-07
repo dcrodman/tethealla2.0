@@ -146,3 +146,28 @@ bool send_welcome_message(patch_client *client, packet_hdr *header,
 
     return send_packet(client);
 }
+
+/* Acknowledgement sent by the DATA portion after receiving the login packet
+ and before sending patch data. */
+bool send_data_ack(patch_client* client) {
+    packet_hdr *header = (packet_hdr*) client->send_buffer;
+    header->pkt_type = DATA_WELCOME_ACK;
+    header->pkt_len = 0x04;
+    client->send_size = 0x04;
+
+    CRYPT_CryptData(&client->server_cipher, client->send_buffer, client->send_size, 1);
+
+    return send_packet(client);
+}
+
+/* Tell the client that we're done sending patch info. */
+bool send_files_done(patch_client* client) {
+    packet_hdr *header = (packet_hdr*) client->send_buffer;
+    header->pkt_type = DATA_FILES_DONE;
+    header->pkt_len = 0x04;
+    client->send_size = 0x04;
+
+    CRYPT_CryptData(&client->server_cipher, client->send_buffer, client->send_size, 1);
+
+    return send_packet(client);
+}
