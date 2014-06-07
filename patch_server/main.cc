@@ -50,8 +50,7 @@ const char *PATCH_PORT = "11000";
 const char *DATA_PORT = "11001";
 
 // Global list of connected clients for the PATCH portion.
-std::list<patch_client*> patch_connections;
-std::list<patch_client*> data_connections;
+std::list<patch_client*> connections;
 
 std::mt19937 rand_gen(time(NULL));
 std::uniform_int_distribution<uint32_t> dist(0, UINT32_MAX);
@@ -106,17 +105,19 @@ int receive_from_client(patch_client *client) {
     CRYPT_CryptData(&client->client_cipher, &client->recv_buffer, bytes, 0);
     print_payload(client->recv_buffer, int(bytes));
 
-    // TODO: Figure out whether PATCH or DATA needs to handle it.
-    patch_process_packet(client);
+    if (client->session == PATCH)
+        patch_process_packet(client);
+    else
+        data_process_packet(client);
+
     memset(client->recv_buffer, 0, sizeof(client->recv_buffer));
-    
     return 0;
 }
 
 /* Disconnect a client, remove it from the list of client connections
  and free the memory associated with the structure.*/
 void destory_client(patch_client* client) {
-    free(client->ip_addr_str);
+
 }
 
 /* Accept a new client connection, initialize the encryption for
@@ -164,7 +165,7 @@ patch_client* accept_client(int sockfd) {
     without the client receiving this packet, so it's all or nothing. */
     if (send_welcome(client, client_seed, server_seed)) {
         // Add them to our list of currently connected clients.
-        patch_connections.push_front(client);
+        connections.push_back(client);
         return client;
     }
     else
@@ -195,36 +196,40 @@ void handle_connections(int patchfd, int datafd) {
                 // New connection to PATCH port
                 printf("Accepting connection to PATCH...\n");
                 patch_client *client = accept_client(patchfd);
-                if (client)
+                if (client) {
                     FD_SET(client->socket, &master);
-                fd_max = (client->socket > fd_max) ? client->socket : fd_max;
+                    fd_max = (client->socket > fd_max) ? client->socket : fd_max;
+                    client->session = PATCH;
+                }
             }
             if (FD_ISSET(datafd, &readfds)) {
                 // New connection to DATA port
                 printf("Accepting connection to DATA...\n");
                 patch_client *client = accept_client(datafd);
-                if (client)
+                if (client) {
                     FD_SET(client->socket, &master);
-                fd_max = (client->socket > fd_max) ? client->socket : fd_max;
+                    fd_max = (client->socket > fd_max) ? client->socket : fd_max;
+                    client->session = DATA;
+                }
             }
             
             // Iterate over the connected clients.
-            std::list<patch_client*>::const_iterator iterator, end;
-            for (iterator = patch_connections.begin(), end = patch_connections.end(); iterator != end; ++iterator) {
-                printf("Checking client %s\n", (*iterator)->ip_addr_str);
+            std::list<patch_client*>::const_iterator c, end;
+            for (c = connections.begin(), end = connections.end(); c != end; ++c) {
+                printf("Checking client %s\n", (*c)->ip_addr_str);
 
-                if (FD_ISSET((*iterator)->socket, &readfds)) {
-                    if (receive_from_client((*iterator)) == 1) {
-                        printf("Closing connection with client %s\n", (*iterator)->ip_addr_str);
-                        FD_CLR((*iterator)->socket, &master);
-                        //patch_connections.erase(iterator);
+                if (FD_ISSET((*c)->socket, &readfds)) {
+                    if (receive_from_client((*c)) == 1) {
+                        printf("Closing connection with client %s\n", (*c)->ip_addr_str);
+                        FD_CLR((*c)->socket, &master);
                         fd_max = datafd;
-                        //destory_client(*iterator);
+                        connections.erase(c++);
+                        destory_client(*c);
                         continue;
                     }
                 }
-                if (FD_ISSET((*iterator)->socket, &writefds)) {
-                    printf("Could send something to %d\n", (*iterator)->socket);
+                if (FD_ISSET((*c)->socket, &writefds)) {
+                    printf("Could send something to %d\n", (*c)->socket);
                 }
             }
 

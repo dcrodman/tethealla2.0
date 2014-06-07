@@ -37,6 +37,11 @@ extern "C" {
 
 const int TCP_BUFFER_SIZE = 65530;
 
+enum server {
+    PATCH,
+    DATA
+};
+
 /* Structure for holding the configuration data specified by the
  user. */
 struct patch_config {
@@ -52,6 +57,7 @@ struct patch_client {
     int socket;
     int port;
     bool ipv6;
+    server session;
 
     char* ip_addr_str;
     sockaddr_storage ip_addr;
