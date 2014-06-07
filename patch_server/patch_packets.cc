@@ -51,7 +51,7 @@ bool send_packet(patch_client* client) {
         total += bytes_sent;
         remaining -= bytes_sent;
     }
-    // TODO: Handle moving client buffer or whatever
+
     memset(client->send_buffer, 0, TCP_BUFFER_SIZE);
     return true;
 }
@@ -101,10 +101,6 @@ bool send_redirect(patch_client* client, uint32_t serverIP, uint16_t serverPort)
     pkt->dataPort = serverPort;
     pkt->padding = 0;
 
-    printf("Redirect packet\n");
-    print_payload(client->send_buffer, 0x0C);
-    printf("\n");
-
     CRYPT_CryptData(&client->server_cipher, &client->send_buffer, 0x0C, 1);
     client->send_size = 0x0C;
 
@@ -137,10 +133,6 @@ bool send_welcome_message(patch_client *client, packet_hdr *header,
     pkt_hdr->pkt_type = LE16(PATCH_WELCOME_MSG);
     pkt_hdr->pkt_len = LE16(pkt_size);
     client->send_size = pkt_size;
-
-    printf("Welcome Message Packet: \n");
-    print_payload(client->send_buffer, pkt_size);
-    printf("\n");
 
     CRYPT_CryptData(&client->server_cipher, &client->send_buffer, pkt_size, 1);
 

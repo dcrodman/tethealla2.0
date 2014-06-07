@@ -65,7 +65,6 @@ int patch_process_packet(patch_client *client) {
     packet_hdr *header = (packet_hdr*) client->recv_buffer;
     header->pkt_type = LE16(header->pkt_type);
     header->pkt_len = LE16(header->pkt_len);
-    printf("PATCH Length: %u, Type: %u\n\n", header->pkt_len, header->pkt_type);
 
     bool result;
     switch (header->pkt_type) {
@@ -139,7 +138,8 @@ int receive_from_client(patch_client *client) {
 /* Disconnect a client, remove it from the list of client connections
  and free the memory associated with the structure.*/
 void destory_client(patch_client* client) {
-
+    free(client->ip_addr_str);
+    free(client);
 }
 
 /* Accept a new client connection, initialize the encryption for
@@ -242,11 +242,10 @@ void handle_connections(int patchfd, int datafd) {
 
                 if (FD_ISSET((*c)->socket, &readfds)) {
                     if (receive_from_client((*c)) == 1) {
-                        printf("Closing connection with client %s\n", (*c)->ip_addr_str);
                         FD_CLR((*c)->socket, &master);
                         fd_max = datafd;
-                        connections.erase(c++);
                         destory_client(*c);
+                        connections.erase(c++);
                         continue;
                     }
                 }
