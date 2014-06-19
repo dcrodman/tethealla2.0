@@ -304,14 +304,6 @@ bool valid_path(char *path) {
     return true;
 }
 
-/* Append dir to path with a trailing "/" and copy it into dest, which should be
- a buffer large enough to hold the resulting string. */
-int concat_path(char *dest, const char *dir, const char *path) {
-
-
-    return 0;
-}
-
 /* Initialize the patch structure with the patch data in dirname by recursively
  walking the filesystem tree. This should be called with the user-specified
  patches directory as the root. */
