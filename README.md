@@ -28,4 +28,9 @@ From there you can either run make to build everything or use whatever applicati
 generated the build files for. You should see one library (libtethealla.a) and (eventually)
 three server executables - patch_sever, login_server, and ship_server. Each should be run
 individually and configured with the instructions provided...as soon as I write them. And
-figure out what configuration they need.
+figure out what configuration they need.  
+
+Note that if you're using Xcode (or another IDE) as the generator to edit or build the 
+project, you may need to explicitly edit your linker's library and include paths. These 
+will likely be /usr/local/lib and /usr/local/include respectively if on *nix and you 
+installed the libraries to your system.
