@@ -1,0 +1,8 @@
+{
+	"patch_ip" : "127.0.0.1",
+	"patch_port" : "11000",
+	"data_port" : "11001",
+	"patch_dir" : "patches",
+	"enable_ipv6" : false,
+	"welcome_message" : "Unconfigured Welcome Message"
+}
