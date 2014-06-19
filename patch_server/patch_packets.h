@@ -35,7 +35,12 @@
 #define PATCH_REDIRECT 0x14
 
 #define DATA_WELCOME_ACK 0x0B
-#define DATA_FILES_DONE 0x12
+#define DATA_CHDIR_TYPE 0x09
+#define DATA_CHDIR_SIZE 0x44
+#define DATA_CHDIR_ABOVE 0x0A
+#define DATA_CHKFILE_TYPE 0x0C
+#define DATA_CHKFILE_SIZE 0x28
+#define DATA_FILES_DONE 0x0D
 
 #include <cstdint>
 #include <sys/socket.h>
@@ -88,6 +93,19 @@ struct login_packet {
     uint8_t padding2[64];    /* All zeroes */
 };
 
+/* Set directory packet sent to the client. */
+struct change_dir_packet {
+    packet_hdr header;
+    char dirname[64];
+};
+
+/* Packet for a file for the client to report back. */
+struct check_file_packet {
+    packet_hdr header;
+    uint32_t patchID;
+    char filename[32];
+};
+
 void print_hex_ascii_line(const u_char *payload, int len, int offset);
 void print_payload(const u_char *payload, int len);
 
@@ -97,8 +115,11 @@ bool send_welcome_ack(patch_client* client);
 bool send_welcome_message(patch_client *client, packet_hdr *header,
     const char* msg, uint32_t size);
 bool send_redirect(patch_client* client, uint32_t serverIP, uint16_t serverPort);
-bool send_data_ack(patch_client* client);
 
+bool send_data_ack(patch_client* client);
+bool send_change_directory(patch_client* client, char* dir);
+bool send_dir_above(patch_client* client);
+bool send_check_file(patch_client* client, uint32_t index, char *filename);
 bool send_files_done(patch_client* client);
 
 #endif

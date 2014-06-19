@@ -29,6 +29,7 @@
 
 #include "patch_server.h"
 #include "patch_packets.h"
+
 extern "C" {
     #include "sniffex.h"
 }
@@ -51,8 +52,10 @@ bool send_packet(patch_client* client) {
         total += bytes_sent;
         remaining -= bytes_sent;
     }
-
+    // TODO: Probably a better way to handle this
     memset(client->send_buffer, 0, TCP_BUFFER_SIZE);
+    client->send_size = 0;
+
     return true;
 }
 
@@ -143,8 +146,8 @@ bool send_welcome_message(patch_client *client, packet_hdr *header,
  and before sending patch data. */
 bool send_data_ack(patch_client* client) {
     packet_hdr *header = (packet_hdr*) client->send_buffer;
-    header->pkt_type = DATA_WELCOME_ACK;
-    header->pkt_len = 0x04;
+    header->pkt_type = LE16(DATA_WELCOME_ACK);
+    header->pkt_len = LE16(0x04);
     client->send_size = 0x04;
 
     CRYPT_CryptData(&client->server_cipher, client->send_buffer, client->send_size, 1);
@@ -152,12 +155,73 @@ bool send_data_ack(patch_client* client) {
     return send_packet(client);
 }
 
-/* Tell the client that we're done sending patch info. */
+/* Tell the clinet to change directories to the one specified by dir. */
+bool send_change_directory(patch_client* client, char* dir) {
+    change_dir_packet *pkt = (change_dir_packet*) client->send_buffer;
+    memset(&client->send_buffer, 0, sizeof(client->send_buffer));
+
+    pkt->header.pkt_type = LE16(DATA_CHDIR_TYPE);
+    pkt->header.pkt_len = LE16(DATA_CHDIR_SIZE);
+    strcpy(pkt->dirname, dir);
+    client->send_size = DATA_CHDIR_SIZE;
+
+    printf("Change Directory:\n");
+    print_payload(client->send_buffer, DATA_CHDIR_SIZE);
+    printf("\n");
+
+    CRYPT_CryptData(&client->server_cipher, client->send_buffer, DATA_CHDIR_SIZE, 1);
+
+    return send_packet(client);
+}
+
+/* Tell the client to set the directory to one dir above. */
+bool send_dir_above(patch_client* client) {
+    packet_hdr *header = (packet_hdr*) client->send_buffer;
+    header->pkt_type = LE16(DATA_CHDIR_ABOVE);
+    header->pkt_len = LE16(0x04);
+    client->send_size = 0x04;
+
+    printf("Set Dir Above:\n");
+    print_payload(client->send_buffer, 0x04);
+    printf("\n");
+
+    CRYPT_CryptData(&client->server_cipher, client->send_buffer, 0x04, 1);
+
+    return send_packet(client);
+}
+
+/* Send information about a particular file to the client to verify its
+ checksum and see if it needs patching. */
+bool send_check_file(patch_client* client, uint32_t index, char *filename) {
+    if (strlen(filename) > 32)
+        return false;
+
+    check_file_packet *pkt = (check_file_packet*) client->send_buffer;
+    pkt->header.pkt_type = LE16(DATA_CHKFILE_TYPE);
+    pkt->header.pkt_len = LE16(DATA_CHKFILE_SIZE);
+    pkt->patchID = LE32(index);
+    strcpy(pkt->filename, filename);
+
+    printf("Send File Check\n");
+    print_payload(client->send_buffer, DATA_CHKFILE_SIZE);
+    printf("\n");
+
+    client->send_size = DATA_CHKFILE_SIZE;
+    CRYPT_CryptData(&client->server_cipher, client->send_buffer, DATA_CHKFILE_SIZE, 1);
+
+    return send_packet(client);
+}
+
+/* Tell the client that we're done sending our list of patches. */
 bool send_files_done(patch_client* client) {
     packet_hdr *header = (packet_hdr*) client->send_buffer;
-    header->pkt_type = DATA_FILES_DONE;
-    header->pkt_len = 0x04;
+    header->pkt_type = LE16(DATA_FILES_DONE);
+    header->pkt_len = LE16(0x04);
     client->send_size = 0x04;
+
+    printf("Send Files Done\n");
+    print_payload(client->send_buffer, 0x04);
+    printf("\n");
 
     CRYPT_CryptData(&client->server_cipher, client->send_buffer, client->send_size, 1);
 

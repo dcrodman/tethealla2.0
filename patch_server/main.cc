@@ -63,6 +63,21 @@ patch_config *server_config;
 
 void destory_client(patch_client* client);
 
+long calculate_checksum(void* data, unsigned long size)
+{
+    long offset,y,cs = 0xFFFFFFFF;
+    for (offset = 0; offset < (long)size; offset++)
+    {
+        cs ^= *(unsigned char*)((long)data + offset);
+        for (y = 0; y < 8; y++)
+        {
+            if (!(cs & 1)) cs = (cs >> 1) & 0x7FFFFFFF;
+            else cs = ((cs >> 1) & 0x7FFFFFFF) ^ 0xEDB88320;
+        }
+    }
+    return (cs ^ 0xFFFFFFFF);
+}
+
 /* Process a client packet sent to the PATCH server. */
 int patch_process_packet(patch_client *client) {
     packet_hdr *header = (packet_hdr*) client->recv_buffer;
@@ -79,7 +94,9 @@ int patch_process_packet(patch_client *client) {
                     server_config->welcome_message, server_config->welcome_size);
             if (!result)
                 return -1;
-            result = send_redirect(client, server_config->serverIP, htons(atoi(DATA_PORT)));
+            result = send_redirect(client,
+                    server_config->serverIP,
+                    htons(atoi(server_config->data_port)));
             break;
         default:
             return -2;
@@ -92,7 +109,7 @@ int data_process_packet(patch_client *client) {
     packet_hdr *header = (packet_hdr*) client->recv_buffer;
     header->pkt_type = LE16(header->pkt_type);
     header->pkt_len = LE16(header->pkt_len);
-    printf("DATA Length: %u, Type: %u\n\n", header->pkt_len, header->pkt_type);
+    printf("DATA Length: %u, Type: %x \n\n", header->pkt_len, header->pkt_type);
 
     bool result;
     switch (header->pkt_type) {
@@ -101,7 +118,6 @@ int data_process_packet(patch_client *client) {
             break;
         case BB_PATCH_LOGIN:
             result = send_data_ack(client);
-            send_files_done(client);
             break;
         default:
             result = 0;
@@ -138,8 +154,7 @@ int receive_from_client(patch_client *client) {
     return 0;
 }
 
-/* Disconnect a client, remove it from the list of client connections
- and free the memory associated with the structure.*/
+/* Free the memory associated with a client. */
 void destory_client(patch_client* client) {
     free(client->ip_addr_str);
     free(client);
@@ -149,6 +164,9 @@ void destory_client(patch_client* client) {
  the session and send them the welcome packet. If the welcome packet
  fails, return NULL as the client will have been disconnected. */
 patch_client* accept_client(int sockfd) {
+
+    // TODO: Check to see whether a client is connecting multiple times.
+
     sockaddr_storage clientaddr;
     socklen_t addrsize = sizeof clientaddr;
     patch_client* client = (patch_client*) malloc(sizeof(patch_client));
@@ -239,13 +257,13 @@ void handle_connections(int patchfd, int datafd) {
             }
             
             // Iterate over the connected clients.
-            std::list<patch_client*>::const_iterator c, end;
             for (c = connections.begin(), end = connections.end(); c != end; ++c) {
                 printf("Checking client %s\n", (*c)->ip_addr_str);
 
                 if (FD_ISSET((*c)->socket, &readfds)) {
                     if (receive_from_client((*c)) == 1) {
                         FD_CLR((*c)->socket, &master);
+                        // TODO: correctly reset fd_max if needed.
                         fd_max = datafd;
                         destory_client(*c);
                         connections.erase(c++);
