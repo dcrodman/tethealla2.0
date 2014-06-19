@@ -3,6 +3,13 @@ cmake_minimum_required(VERSION 2.6)
 
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR})
 
+# !!NOTE!! Set this variable to False if building for production.
+set(DEBUGGING True)
+
+if (DEBUGGING)
+    add_definitions(-DDEBUGGING)
+endif(DEBUGGING)
+
 add_executable(patch_server
     main.cc
     patch_packets.cc
@@ -25,4 +32,9 @@ endif (ICONV_FOUND)
 add_subdirectory(./../libtethealla tethealla)
 include_directories(${LIBTETHEALLA_INCLUDE_DIR})
 
+# TODO: Implement finding libjansson instead of hardcoding path.
+include_directories(/usr/local/include/)
+link_directories(/usr/local/lib/)
+
+target_link_libraries(patch_server jansson)
 target_link_libraries(patch_server tethealla)
