@@ -40,14 +40,17 @@
 
 #include <iconv.h>
 
+extern "C" {
+    #include <jansson.h>
+}
+
 #include "patch_server.h"
 #include "patch_packets.h"
 
 // Allowed number of pending connections.
 const int BACKLOG = 10;
-
-const char *PATCH_PORT = "11000";
-const char *DATA_PORT = "11001";
+const char* CFG_NAME = "patch_config.json";
+const char* LOCAL_DIR = "/usr/local/share/tethealla/config/";
 
 // Global list of connected clients for the PATCH portion.
 std::list<patch_client*> connections;
@@ -253,24 +256,64 @@ void handle_connections(int patchfd, int datafd) {
                     printf("Could send something to %d\n", (*c)->socket);
                 }
             }
-
         } else if (select_result == -1) {
             perror("select");
             exit(5);
         } else {
             // We timed out.
+            printf("Timed out\n");
         }
     }
 }
 
+/* Writes the contents of a JSON error to stdout.*/
+void json_error(json_error_t* error) {
+    printf("Error: %s\n", error->text);
+    printf("Source: %s\n", error->source);
+    printf("Line: %d, Column: %d\n", error->line, error->column);
+}
+
 /* Load/prepare configuration file with data set by the server admin. It uses a global
  configuration and it's bad, but at least it should never be modified. */
-void load_config() {
+int load_config() {
     server_config = (patch_config*) malloc(sizeof(patch_config));
     memset(server_config, 0, sizeof(patch_config));
 
-    // Handle the server's IP address, needed for binding and packet 0x14.
-    server_config->serverIPStr = "127.0.0.1";
+    // Provide a default value so that if the user doesn't specify it we aren't hosed.
+    server_config->enable_ipv6 = false;
+
+    json_error_t error;
+    json_t *cfg_file = json_load_file(CFG_NAME, JSON_DECODE_ANY, &error);
+
+    if (!cfg_file) {
+        // Look in LOCAL_DIR in case the files were placed there instead.
+        char config_dir[128];
+        strncat(config_dir, LOCAL_DIR, strlen(LOCAL_DIR));
+        strncat(config_dir, CFG_NAME, strlen(CFG_NAME));
+
+        cfg_file = json_load_file(config_dir, JSON_DECODE_ANY, &error);
+
+        if (!cfg_file) {
+            printf("Failed to load configuration file.\n");
+            json_error(&error);
+            return -1;
+        }
+    }
+
+    // Unpack the JSON config file into the corresponding server config entries.
+    int result = json_unpack_ex(cfg_file, &error, JSON_STRICT,
+            "{s:s, s:s, s:s, s:s, s?b, s:s}",
+            "patch_ip", &(server_config->serverIPStr),
+            "patch_port", &(server_config->patch_port),
+            "data_port", &(server_config->data_port),
+            "patch_dir", &(server_config->patch_directory),
+            "enable_ipv6", &(server_config->enable_ipv6),
+            "welcome_message", &(server_config->welcome_message));
+    if (result == -1) {
+        json_error(&error);
+        return -1;
+    }
+
     server_config->serverIP = inet_addr(server_config->serverIPStr);
 
     // The Welcome Message sent in PATCH_WELCOME_MESSAGE is expected to be encoded
@@ -281,11 +324,8 @@ void load_config() {
         exit(1);
     }
 
-    // Grab our welcome message. Hardcoded for now.
-    char welcome_message[] = "Tethealla2.0 Welcome Message";
-    char *inbuf = welcome_message;
-    size_t inbytes = (size_t) strlen(welcome_message);
-
+    char *inbuf = server_config->welcome_message;
+    size_t inbytes = (size_t) strlen(server_config->welcome_message);
     size_t outbytes = inbytes * 2, avail = outbytes;
     char *outbuf = (char*) malloc(outbytes), *outptr = outbuf;
     memset(outbuf, 0, outbytes);
@@ -298,6 +338,8 @@ void load_config() {
 
     server_config->welcome_message = outbuf;
     server_config->welcome_size = outbytes;
+
+    return 0;
 }
 
 /* Create and open a server socket to start listening on a particular port.
@@ -348,7 +390,8 @@ int create_socket(const char* port, const addrinfo *hints) {
 
 int main(int argc, const char * argv[]) {
 
-    load_config();
+    if (load_config() == -1)
+        exit(1);
 
     addrinfo hints;
     hints.ai_flags = AI_NUMERICHOST;
@@ -356,10 +399,10 @@ int main(int argc, const char * argv[]) {
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
 
-    printf("Opening PATCH socket on port %s...", PATCH_PORT);
-    int patch_sockfd = create_socket(PATCH_PORT, &hints);
-    printf("OK\nOpening DATA socket on port %s...", DATA_PORT);
-    int data_sockfd = create_socket(DATA_PORT, &hints);
+    printf("Opening PATCH socket on port %s...", server_config->patch_port);
+    int patch_sockfd = create_socket(server_config->patch_port, &hints);
+    printf("OK\nOpening DATA socket on port %s...", server_config->data_port);
+    int data_sockfd = create_socket(server_config->data_port, &hints);
     printf("OK\n");
     
     handle_connections(patch_sockfd, data_sockfd);

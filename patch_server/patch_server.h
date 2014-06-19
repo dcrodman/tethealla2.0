@@ -47,8 +47,13 @@ enum server {
 struct patch_config {
     char *serverIPStr;
     uint32_t serverIP;
+    char *patch_port;
+    char *data_port;
 
-    const char *welcome_message;
+    char *patch_directory;
+    bool enable_ipv6;
+
+    char *welcome_message;
     uint32_t welcome_size;
 };
 
@@ -72,7 +77,5 @@ struct patch_client {
 
     bool disconnected;
 };
-
-const bool DEBUGGING = true;
 
 #endif
