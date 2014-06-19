@@ -52,11 +52,14 @@ const int BACKLOG = 10;
 const char* CFG_NAME = "patch_config.json";
 const char* LOCAL_DIR = "/usr/local/share/tethealla/config/";
 
+// Indicate which filenames should be skipped when looking for patches.
+const int NUM_SKIP_PATHS = 3;
+const char* SKIP_PATHS[] = {
+  ".", "..", ".DS_Store"
+};
+
 // Global list of connected clients for the PATCH portion.
 std::list<patch_client*> connections;
-
-std::mt19937 rand_gen(time(NULL));
-std::uniform_int_distribution<uint32_t> dist(0, UINT32_MAX);
 
 // Global configuration file populated by load_config().
 patch_config *server_config;
@@ -132,7 +135,6 @@ int data_process_packet(patch_client *client) {
  closed the connection. Side effect: will close the socket if the client
  disconnects. */
 int receive_from_client(patch_client *client) {
-    
     printf("Receiving from %s\n", client->ip_addr_str);
     size_t bytes = recv(client->socket, &client->recv_buffer, TCP_BUFFER_SIZE, 0);
     
@@ -164,9 +166,7 @@ void destory_client(patch_client* client) {
  the session and send them the welcome packet. If the welcome packet
  fails, return NULL as the client will have been disconnected. */
 patch_client* accept_client(int sockfd) {
-
     // TODO: Check to see whether a client is connecting multiple times.
-
     sockaddr_storage clientaddr;
     socklen_t addrsize = sizeof clientaddr;
     patch_client* client = (patch_client*) malloc(sizeof(patch_client));
@@ -197,6 +197,9 @@ patch_client* accept_client(int sockfd) {
     }
     
     /* Generate the encryption keys for the client and server.*/
+    static std::mt19937 rand_gen(time(NULL));
+    static std::uniform_int_distribution<uint32_t> dist(0, UINT32_MAX);
+
     uint32_t client_seed = dist(rand_gen);
     uint32_t server_seed = dist(rand_gen);
 
