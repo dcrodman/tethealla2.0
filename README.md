@@ -6,7 +6,10 @@ Continued development and port of Sodaboy's Tethealla PSOBB server to *nix syste
 Installation Requirements
 ============
 
-libiconv
+	cmake
+    libiconv
+    jansson
+
 
 Build Instructions
 ============
