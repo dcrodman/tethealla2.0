@@ -37,6 +37,7 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <unistd.h>
+#include <dirent.h>
 
 #include <iconv.h>
 
@@ -58,6 +59,8 @@ const char* SKIP_PATHS[] = {
   ".", "..", ".DS_Store"
 };
 
+// Patch data populated by load_patches().
+std::list<patch_file*> patches;
 // Global list of connected clients for the PATCH portion.
 std::list<patch_client*> connections;
 
@@ -294,6 +297,54 @@ void json_error(json_error_t* error) {
     printf("Line: %d, Column: %d\n", error->line, error->column);
 }
 
+bool valid_path(char *path) {
+    for (int i = 0; i < NUM_SKIP_PATHS; i++)
+        if (strcmp(path, SKIP_PATHS[i]) == 0)
+            return false;
+    return true;
+}
+
+/* Append dir to path with a trailing "/" and copy it into dest, which should be
+ a buffer large enough to hold the resulting string. */
+int concat_path(char *dest, const char *dir, const char *path) {
+
+
+    return 0;
+}
+
+/* Initialize the patch structure with the patch data in dirname by recursively
+ walking the filesystem tree. This should be called with the user-specified
+ patches directory as the root. */
+int load_patches(const char* dirname) {
+    struct dirent *file;
+    DIR *patch_dir = opendir(dirname);
+    if (patch_dir == NULL) {
+        perror("load_patches");
+        return -1;
+    }
+
+    while ((file = readdir(patch_dir)) != NULL) {
+        if (valid_path(file->d_name)) {
+            // We only care about regular files and directories; symbolic links
+            // (and really anything else) will be ignored.
+            if (file->d_type == DT_REG) {
+                printf("Processing file %s%s\n", dirname, file->d_name);
+
+            } else if (file->d_type == DT_DIR) {
+                // TODO: (minor) Estimate/determine the potential filename length more precisely.
+                char subdir[512] = {0};
+                strncat(subdir, dirname, strlen(dirname));
+                strncat(subdir, file->d_name, strlen(file->d_name));
+                strncat(subdir, "/", 1);
+                load_patches(subdir);
+            }
+        }
+    }
+
+    closedir(patch_dir);
+    return 0;
+}
+
 /* Load/prepare configuration file with data set by the server admin. It uses a global
  configuration and it's bad, but at least it should never be modified. */
 int load_config() {
@@ -410,8 +461,7 @@ int create_socket(const char* port, const addrinfo *hints) {
 }
 
 int main(int argc, const char * argv[]) {
-
-    if (load_config() == -1)
+    if (load_config() == -1 || load_patches(server_config->patch_directory) == -1)
         exit(1);
 
     addrinfo hints;

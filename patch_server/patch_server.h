@@ -42,8 +42,7 @@ enum server {
     DATA
 };
 
-/* Structure for holding the configuration data specified by the
- user. */
+/* Structure for holding the configuration data specified by the user. */
 struct patch_config {
     char *serverIPStr;
     uint32_t serverIP;
@@ -76,6 +75,13 @@ struct patch_client {
     unsigned int recv_size;
 
     bool disconnected;
+};
+
+/* Patch information associated with each file in the patches directory. */
+struct patch_file {
+    const char* filename;
+    uint32_t checksum;
+    uint32_t index;
 };
 
 #endif
