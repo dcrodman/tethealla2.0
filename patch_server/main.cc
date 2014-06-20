@@ -404,10 +404,12 @@ int load_patches(const char* dirname) {
                 for (int i = 0; i <= patch_steps; i++)
                     printf("patch_dirs %i: %s\n", i, patch_entry->path_dirs[i]);
 
-                printf("File: %s\t\t", patch_entry->filename);
-                printf("Size: %u bytes, ", patch_entry->file_size);
-                printf("Checksum: %08x, ", patch_entry->checksum);
-                printf("Index: %u\n", patch_entry->index);
+                if (DEBUGGING) {
+                    printf("File: %s\t\t", patch_entry->filename);
+                    printf("Size: %u bytes, ", patch_entry->file_size);
+                    printf("Checksum: %08x, ", patch_entry->checksum);
+                    printf("Index: %u\n", patch_entry->index);
+                }
 
                 // Add each patch to the end so that their index will match their position in the
                 // list for O(1) lookups.
@@ -579,8 +581,6 @@ int main(int argc, const char * argv[]) {
     printf("OK\n");
     
     handle_connections(patch_sockfd, data_sockfd);
-
-    free(server_config);
 
     return 0;
 }
