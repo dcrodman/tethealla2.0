@@ -103,11 +103,19 @@ struct change_dir_packet {
     char dirname[64];
 };
 
-/* Packet for a file for the client to report back. */
+/* Packet sent to the client with a file to report back. */
 struct check_file_packet {
     packet_hdr header;
     uint32_t patchID;
     char filename[32];
+};
+
+/* File status as reported by the client. */
+struct client_file_packet {
+    packet_hdr header;
+    uint32_t patchID;
+    uint32_t checksum;
+    uint32_t file_size;
 };
 
 void print_hex_ascii_line(const u_char *payload, int len, int offset);

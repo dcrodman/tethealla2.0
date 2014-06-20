@@ -30,6 +30,7 @@
 #include <cerrno>
 #include <iostream>
 #include <list>
+#include <vector>
 #include <random>
 
 #include <arpa/inet.h>
@@ -60,7 +61,7 @@ const char* SKIP_PATHS[] = {
 };
 
 // Patch data populated by load_patches().
-std::list<patch_file*> patches;
+std::vector<patch_file*> patches;
 // Global list of connected clients for the PATCH portion.
 std::list<patch_client*> connections;
 
@@ -84,11 +85,32 @@ long calculate_checksum(void* data, unsigned long size)
     return (cs ^ 0xFFFFFFFF);
 }
 
+int handle_file_check(patch_client *client) {
+    client_file_packet *pkt = (client_file_packet*) client->recv_buffer;
+    patch_file *patch = patches.at(pkt->patchID);
+
+    if (DEBUGGING) {
+        printf("Checking file:\n");
+        printf("Filename: %s\n", patch->filename);
+        printf("Index: %u\n", pkt->patchID);
+        printf("Checksum: %08x\n", pkt->checksum);
+        printf("Size: %u bytes\n", pkt->file_size);
+    }
+
+    if (pkt->file_size != patch->file_size ||
+            pkt->checksum != patch->checksum) {
+        printf("Updating file\n");
+        // TODO: Process updating file.
+    }
+
+    return 0;
+}
+
 /* Handle sending the entire file list to the client. */
 int send_file_list(patch_client* client) {
     int client_steps = 0;
     //Iterate over the connected clients.
-    std::list<patch_file*>::const_iterator patch, end;
+    std::vector<patch_file*>::const_iterator patch, end;
     for (patch = patches.begin(), end = patches.end(); patch != end; ++patch) {
         while (client_steps != (*patch)->patch_steps) {
             if (client_steps < (*patch)->patch_steps) {
@@ -149,6 +171,9 @@ int data_process_packet(patch_client *client) {
         case BB_PATCH_LOGIN:
             result = send_data_ack(client);
             send_file_list(client);
+            break;
+        case DATA_CLIENT_FILE_TYPE:
+            result = handle_file_check(client);
             break;
         default:
             result = 0;
