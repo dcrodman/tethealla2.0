@@ -84,6 +84,30 @@ long calculate_checksum(void* data, unsigned long size)
     return (cs ^ 0xFFFFFFFF);
 }
 
+/* Handle sending the entire file list to the client. */
+int send_file_list(patch_client* client) {
+    int client_steps = 0;
+    //Iterate over the connected clients.
+    std::list<patch_file*>::const_iterator patch, end;
+    for (patch = patches.begin(), end = patches.end(); patch != end; ++patch) {
+        while (client_steps != (*patch)->patch_steps) {
+            if (client_steps < (*patch)->patch_steps) {
+                // We need to dig into the file hierarchy until we're in the same dir.
+                client_steps++;
+                send_change_directory(client, (*patch)->path_dirs[client_steps]);
+            } else {
+                // Back up until we're in the same dir. From here we can change dir back
+                // to where we need to go.
+                client_steps--;
+                send_dir_above(client);
+            }
+        }
+        send_check_file(client, (*patch)->index, (*patch)->filename);
+    }
+    send_list_done(client);
+    return 0;
+}
+
 /* Process a client packet sent to the PATCH server. */
 int patch_process_packet(patch_client *client) {
     packet_hdr *header = (packet_hdr*) client->recv_buffer;
@@ -124,6 +148,7 @@ int data_process_packet(patch_client *client) {
             break;
         case BB_PATCH_LOGIN:
             result = send_data_ack(client);
+            send_file_list(client);
             break;
         default:
             result = 0;
@@ -304,23 +329,89 @@ bool valid_path(char *path) {
     return true;
 }
 
+/* Convert the path from the patches directory to an array that
+ can be used to help move the client around their directory. Dest
+ MUST have enough array slots (len) to hold the entiretry of the path. E.g.
+ if the path is /patches/data/sounds, its size must be 3 or the path will
+ not be fully parsed. */
+void parse_patch_path(char **dest, int len, const char *path) {
+    int cur = 0;
+    char mpath[strlen(path)], *cmp;
+    strcpy(mpath, path);
+
+    cmp = strtok(mpath, "/");
+    while (cmp != NULL && cur < len) {
+        dest[cur] = (char*) malloc(sizeof(char) * strlen(cmp));
+        if (strcmp(cmp, "patches") == 0)
+            strcpy(dest[cur], ".");
+        else
+            strcpy(dest[cur], cmp);
+        cmp = strtok(NULL, "/");
+        cur++;
+    }
+}
+
 /* Initialize the patch structure with the patch data in dirname by recursively
  walking the filesystem tree. This should be called with the user-specified
  patches directory as the root. */
 int load_patches(const char* dirname) {
     struct dirent *file;
+    static uint32_t patch_index = 0;
+    static int patch_steps = 0;
+
     DIR *patch_dir = opendir(dirname);
     if (patch_dir == NULL) {
         perror("load_patches");
         return -1;
     }
+    printf("Scanning %s\n", dirname);
 
     while ((file = readdir(patch_dir)) != NULL) {
         if (valid_path(file->d_name)) {
             // We only care about regular files and directories; symbolic links
             // (and really anything else) will be ignored.
             if (file->d_type == DT_REG) {
-                printf("Processing file %s%s\n", dirname, file->d_name);
+                patch_file *patch_entry = (patch_file*) malloc(sizeof(patch_file));
+
+                memcpy(patch_entry->filename, file->d_name, strlen(file->d_name) + 1);
+                strncat(patch_entry->full_path, dirname, strlen(dirname));
+                strncat(patch_entry->full_path, "/", 1);
+                strncat(patch_entry->full_path, file->d_name, strlen(file->d_name));
+
+                FILE* fd = fopen(patch_entry->full_path, "r");
+                if (fd == NULL) {
+                    perror("skipping");
+                    continue;
+                }
+                fseek(fd, 0, SEEK_END);
+                patch_entry->file_size = ftell(fd);
+                fseek(fd, 0, SEEK_SET);
+
+                char filebuf[patch_entry->file_size + 1];
+                fread(filebuf, 1, patch_entry->file_size, fd);
+                fclose(fd);
+
+                patch_entry->checksum = calculate_checksum(filebuf, patch_entry->file_size);
+                patch_entry->index = patch_index++;
+
+                // Keep track of how far we are into the file hierarchy so that we can tell the
+                // client to change directories more easily. patch_dirs will contain the dir name
+                // at each level so that we can dig deeper by retrieving the folder name at any level.
+                patch_entry->patch_steps = patch_steps;
+                patch_entry->path_dirs = (char**) malloc(sizeof(char*) * patch_steps + 1);
+                parse_patch_path(patch_entry->path_dirs, patch_steps + 1, dirname);
+
+                for (int i = 0; i <= patch_steps; i++)
+                    printf("patch_dirs %i: %s\n", i, patch_entry->path_dirs[i]);
+
+                printf("File: %s\t\t", patch_entry->filename);
+                printf("Size: %u bytes, ", patch_entry->file_size);
+                printf("Checksum: %08x, ", patch_entry->checksum);
+                printf("Index: %u\n", patch_entry->index);
+
+                // Add each patch to the end so that their index will match their position in the
+                // list for O(1) lookups.
+                patches.push_back(patch_entry);
 
             } else if (file->d_type == DT_DIR) {
                 // TODO: (minor) Estimate/determine the potential filename length more precisely.
@@ -328,7 +419,9 @@ int load_patches(const char* dirname) {
                 strncat(subdir, dirname, strlen(dirname));
                 strncat(subdir, file->d_name, strlen(file->d_name));
                 strncat(subdir, "/", 1);
+                patch_steps++;
                 load_patches(subdir);
+                patch_steps--;
             }
         }
     }
@@ -340,6 +433,7 @@ int load_patches(const char* dirname) {
 /* Load/prepare configuration file with data set by the server admin. It uses a global
  configuration and it's bad, but at least it should never be modified. */
 int load_config() {
+    printf("Loading config file %s...", CFG_NAME);
     server_config = (patch_config*) malloc(sizeof(patch_config));
     memset(server_config, 0, sizeof(patch_config));
 
@@ -355,6 +449,7 @@ int load_config() {
         strncat(config_dir, LOCAL_DIR, strlen(LOCAL_DIR));
         strncat(config_dir, CFG_NAME, strlen(CFG_NAME));
 
+        printf("Failed.\nLoading config file in %s...", config_dir);
         cfg_file = json_load_file(config_dir, JSON_DECODE_ANY, &error);
 
         if (!cfg_file) {
@@ -403,6 +498,7 @@ int load_config() {
     server_config->welcome_message = outbuf;
     server_config->welcome_size = outbytes;
 
+    printf("Done!\n\n");
     return 0;
 }
 
@@ -453,8 +549,22 @@ int create_socket(const char* port, const addrinfo *hints) {
 }
 
 int main(int argc, const char * argv[]) {
-    if (load_config() == -1 || load_patches(server_config->patch_directory) == -1)
+    if (load_config() == -1)
         exit(1);
+
+    // Change our working directory to the patches dir to make processing packets
+    // easier (by not having to deal with parsing the path).
+    char currentdir[512];
+    getcwd(currentdir, 512);
+    chdir(server_config->patch_directory);
+    chdir("..");
+
+    printf("Loading patches from %s\n", server_config->patch_directory);
+    if (load_patches("patches/") == -1)
+        exit(1);
+    printf("Done!\n\n");
+
+    chdir(currentdir);
 
     addrinfo hints;
     hints.ai_flags = AI_NUMERICHOST;

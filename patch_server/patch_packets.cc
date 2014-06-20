@@ -213,13 +213,28 @@ bool send_check_file(patch_client* client, uint32_t index, char *filename) {
 }
 
 /* Tell the client that we're done sending our list of patches. */
+bool send_list_done(patch_client* client) {
+    packet_hdr *header = (packet_hdr*) client->send_buffer;
+    header->pkt_type = LE16(DATA_LIST_DONE);
+    header->pkt_len = LE16(0x04);
+    client->send_size = 0x04;
+
+    printf("Send List Done\n");
+    print_payload(client->send_buffer, 0x04);
+    printf("\n");
+
+    CRYPT_CryptData(&client->server_cipher, client->send_buffer, client->send_size, 1);
+
+    return send_packet(client);
+}
+
 bool send_files_done(patch_client* client) {
     packet_hdr *header = (packet_hdr*) client->send_buffer;
     header->pkt_type = LE16(DATA_FILES_DONE);
     header->pkt_len = LE16(0x04);
     client->send_size = 0x04;
 
-    printf("Send Files Done\n");
+    printf("Send List Done\n");
     print_payload(client->send_buffer, 0x04);
     printf("\n");
 

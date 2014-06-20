@@ -79,9 +79,15 @@ struct patch_client {
 
 /* Patch information associated with each file in the patches directory. */
 struct patch_file {
-    const char* filename;
+    char filename[NAME_MAX];
+    char full_path[PATH_MAX + NAME_MAX];
+    uint32_t file_size;
     uint32_t checksum;
     uint32_t index;
+    // Depth of enclosing folder relative to patches (and thus psobb) directory.
+    int patch_steps;
+    // Array containing the path directory components of the file.
+    char **path_dirs;
 };
 
 #endif

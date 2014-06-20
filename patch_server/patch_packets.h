@@ -40,7 +40,12 @@
 #define DATA_CHDIR_ABOVE 0x0A
 #define DATA_CHKFILE_TYPE 0x0C
 #define DATA_CHKFILE_SIZE 0x28
-#define DATA_FILES_DONE 0x0D
+#define DATA_LIST_DONE 0x0D
+#define DATA_FILES_DONE 0x12
+
+#define DATA_CLIENT_LIST_DONE 0x10
+#define DATA_CLIENT_FILE_TYPE 0x0F
+#define DATA_CLIENT_FILE_SIZE 0x10
 
 #include <cstdint>
 #include <sys/socket.h>
@@ -120,6 +125,7 @@ bool send_data_ack(patch_client* client);
 bool send_change_directory(patch_client* client, char* dir);
 bool send_dir_above(patch_client* client);
 bool send_check_file(patch_client* client, uint32_t index, char *filename);
+bool send_list_done(patch_client* client);
 bool send_files_done(patch_client* client);
 
 #endif
