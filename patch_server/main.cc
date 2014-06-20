@@ -139,7 +139,7 @@ int data_process_packet(patch_client *client) {
     packet_hdr *header = (packet_hdr*) client->recv_buffer;
     header->pkt_type = LE16(header->pkt_type);
     header->pkt_len = LE16(header->pkt_len);
-    printf("DATA Length: %u, Type: %x \n\n", header->pkt_len, header->pkt_type);
+    printf("DATA Length: %u, Type: %02x \n\n", header->pkt_len, header->pkt_type);
 
     bool result;
     switch (header->pkt_type) {
@@ -163,7 +163,6 @@ int data_process_packet(patch_client *client) {
  closed the connection. Side effect: will close the socket if the client
  disconnects. */
 int receive_from_client(patch_client *client) {
-    printf("Receiving from %s\n", client->ip_addr_str);
     size_t bytes = recv(client->socket, &client->recv_buffer, TCP_BUFFER_SIZE, 0);
     
     if (bytes == 0) {
@@ -173,7 +172,11 @@ int receive_from_client(patch_client *client) {
     }
 
     CRYPT_CryptData(&client->client_cipher, &client->recv_buffer, bytes, 0);
-    print_payload(client->recv_buffer, int(bytes));
+
+    if (DEBUGGING) {
+        printf("Received %lu bytes from %s\n", bytes, client->ip_addr_str);
+        print_payload(client->recv_buffer, int(bytes));
+    }
 
     if (client->session == PATCH)
         patch_process_packet(client);
@@ -400,9 +403,6 @@ int load_patches(const char* dirname) {
                 patch_entry->patch_steps = patch_steps;
                 patch_entry->path_dirs = (char**) malloc(sizeof(char*) * patch_steps + 1);
                 parse_patch_path(patch_entry->path_dirs, patch_steps + 1, dirname);
-
-                for (int i = 0; i <= patch_steps; i++)
-                    printf("patch_dirs %i: %s\n", i, patch_entry->path_dirs[i]);
 
                 if (DEBUGGING) {
                     printf("File: %s\t\t", patch_entry->filename);

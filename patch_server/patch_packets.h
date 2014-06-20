@@ -43,9 +43,8 @@
 #define DATA_LIST_DONE 0x0D
 #define DATA_FILES_DONE 0x12
 
-#define DATA_CLIENT_LIST_DONE 0x10
 #define DATA_CLIENT_FILE_TYPE 0x0F
-#define DATA_CLIENT_FILE_SIZE 0x10
+#define DATA_CLIENT_LIST_DONE 0x10
 
 #include <cstdint>
 #include <sys/socket.h>
