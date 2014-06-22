@@ -316,6 +316,7 @@ void handle_connections(int patchfd, int datafd) {
             }
             
             // Iterate over the connected clients.
+            std::list<patch_client*>::const_iterator c, end;
             for (c = connections.begin(), end = connections.end(); c != end; ++c) {
                 printf("Checking client %s\n", (*c)->ip_addr_str);
 
