@@ -60,6 +60,7 @@ struct patch_config {
 /* Patch information associated with each file in the patches directory. */
 struct patch_file {
     char filename[NAME_MAX];
+    char relative_path[PATH_MAX + NAME_MAX];
     char full_path[PATH_MAX + NAME_MAX];
     uint32_t file_size;
     uint32_t checksum;

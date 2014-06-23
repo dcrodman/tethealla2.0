@@ -453,13 +453,14 @@ int load_patches(const char* dirname) {
             // (and really anything else) will be ignored.
             if (file->d_type == DT_REG) {
                 patch_file *patch_entry = (patch_file*) malloc(sizeof(patch_file));
-
                 memcpy(patch_entry->filename, file->d_name, strlen(file->d_name) + 1);
-                strncat(patch_entry->full_path, dirname, strlen(dirname));
-                strncat(patch_entry->full_path, "/", 1);
-                strncat(patch_entry->full_path, file->d_name, strlen(file->d_name));
 
-                FILE* fd = fopen(patch_entry->full_path, "r");
+                // Path relative to the PSOBB working directory.
+                strncat(patch_entry->relative_path, dirname, strlen(dirname));
+                strncat(patch_entry->relative_path, "/", 1);
+                strncat(patch_entry->relative_path, file->d_name, strlen(file->d_name));
+
+                FILE* fd = fopen(patch_entry->relative_path, "r");
                 if (fd == NULL) {
                     perror("skipping");
                     continue;
@@ -481,6 +482,14 @@ int load_patches(const char* dirname) {
                 patch_entry->patch_steps = patch_steps;
                 patch_entry->path_dirs = (char**) malloc(sizeof(char*) * patch_steps + 1);
                 parse_patch_path(patch_entry->path_dirs, patch_steps + 1, dirname);
+
+                // Fully-qualified location of the file for access without changing directory.
+                strcpy(patch_entry->full_path, server_config->patch_directory);
+                for (int i = 1; i <= patch_steps; i++) {
+                    strncat(patch_entry->full_path, patch_entry->path_dirs[i],
+                            strlen(patch_entry->path_dirs[i]));
+                    strncat(patch_entry->full_path, "/", 1);
+                }
 
                 if (DEBUGGING) {
                     printf("File: %s\t\t", patch_entry->filename);
