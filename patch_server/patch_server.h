@@ -71,8 +71,10 @@ struct patch_client {
     
     unsigned char send_buffer[TCP_BUFFER_SIZE];
     unsigned int send_size;
+
     unsigned char recv_buffer[TCP_BUFFER_SIZE];
     unsigned int recv_size;
+    unsigned int packet_sz;
 
     bool disconnected;
 };

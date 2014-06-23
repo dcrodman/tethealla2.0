@@ -161,7 +161,6 @@ int data_process_packet(patch_client *client) {
     packet_hdr *header = (packet_hdr*) client->recv_buffer;
     header->pkt_type = LE16(header->pkt_type);
     header->pkt_len = LE16(header->pkt_len);
-    printf("DATA Length: %u, Type: %02x \n\n", header->pkt_len, header->pkt_type);
 
     bool result;
     switch (header->pkt_type) {
@@ -169,8 +168,9 @@ int data_process_packet(patch_client *client) {
             result = send_welcome_ack(client);
             break;
         case BB_PATCH_LOGIN:
-            result = send_data_ack(client);
-            send_file_list(client);
+            result = send_data_ack(client) +
+            send_file_list(client) +
+            send_dir_above(client);
             break;
         case DATA_CLIENT_FILE_TYPE:
             result = handle_file_check(client);
@@ -185,30 +185,75 @@ int data_process_packet(patch_client *client) {
 /* Read in whatever a client is trying to send us and store it in their
  respective receiving buffer and pass it along to the packet handler for
  a response. Returns 0 on successful read, -1 on error, or 1 if the client
- closed the connection. Side effect: will close the socket if the client
- disconnects. */
+ closed the connection. */
 int receive_from_client(patch_client *client) {
-    size_t bytes = recv(client->socket, &client->recv_buffer, TCP_BUFFER_SIZE, 0);
+    packet_hdr *header;
+    ssize_t bytes = 0;
     
-    if (bytes == 0) {
-        client->disconnected = true;
-        close(client->socket);
-        return 1;
+    if (client->recv_size < 4) {
+        // Start by reading in the packet's header.
+        bytes = recv(client->socket, client->recv_buffer, 4 - client->recv_size, 0);
+        client->recv_size += (int) bytes;
+        if (bytes == -1)
+            perror("recv");
+
+        if (bytes <= 0) {
+            // Disconnect on error or if the client explicitly closed the connection.
+            client->disconnected = true;
+            return (bytes == -1) ? -1 : 1;
+        }
+        if (client->recv_size < 4)
+            // Wait for the client to send us more data since we don't have a header yet.
+            return 0;
     }
 
-    CRYPT_CryptData(&client->client_cipher, &client->recv_buffer, bytes, 0);
+    if (!client->packet_sz) {
+        // Decrypt our header since we have all of it by now.
+        CRYPT_CryptData(&client->client_cipher, client->recv_buffer, 4, 0);
+        header = (packet_hdr*) client->recv_buffer;
+        client->packet_sz = header->pkt_len;
+
+        // Skip ahead if all we got is a 4 byte header.
+        if (client->packet_sz == 4)
+            goto handle;
+    }
+
+    // Receive the rest of the packet (or as much as the client was able to send us).
+    bytes = recv(client->socket, client->recv_buffer + client->recv_size,
+                 client->packet_sz - client->recv_size, 0);
+    client->recv_size += bytes;
+
+    if (bytes == -1)
+        perror("recv");
+    if (bytes <= 0) {
+        client->disconnected = true;
+        return (bytes == -1) ? -1 : 1;
+    }
+
+    if (client->recv_size < client->packet_sz)
+        // Wait until we get the rest of the packet.
+        return 0;
+
+    // By now we've received the whole packet.
+    CRYPT_CryptData(&client->client_cipher, client->recv_buffer + 4, client->packet_sz - 4, 0);
 
     if (DEBUGGING) {
-        printf("Received %lu bytes from %s\n", bytes, client->ip_addr_str);
+        printf("Received %lu bytes from %s\n", bytes + 4, client->ip_addr_str);
         print_payload(client->recv_buffer, int(bytes));
     }
 
+handle:
     if (client->session == PATCH)
         patch_process_packet(client);
     else
         data_process_packet(client);
 
-    memset(client->recv_buffer, 0, sizeof(client->recv_buffer));
+    // Move the packet out of the recv buffer and reduce the currently received size.
+
+    client->recv_size -= client->packet_sz;
+    memmove(client->recv_buffer, client->recv_buffer + client->packet_sz, client->packet_sz);
+    client->packet_sz = 0;
+
     return 0;
 }
 
@@ -234,6 +279,8 @@ patch_client* accept_client(int sockfd) {
     }
     client->socket = clientfd;
     client->disconnected = false;
+    client->packet_sz = 0;
+    client->recv_size = 0;
 
     // IPv6?
     if (clientaddr.ss_family == AF_INET) {
