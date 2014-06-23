@@ -284,6 +284,9 @@ patch_client* accept_client(int sockfd) {
     client->packet_sz = 0;
     client->recv_size = 0;
 
+    memset(client->send_buffer, 0, TCP_BUFFER_SIZE);
+    memset(client->recv_buffer, 0, TCP_BUFFER_SIZE);
+
     // IPv6?
     if (clientaddr.ss_family == AF_INET) {
         sockaddr_in* ip = ((sockaddr_in*)&clientaddr);
