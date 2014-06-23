@@ -75,8 +75,8 @@ bool send_packet(patch_client *client, int len) {
 /* Send only a 4-byte header to the client. Useful for ACKs and brief messages.*/
 bool send_header(patch_client* client, int type) {
     packet_hdr *header = (packet_hdr*) client->send_buffer;
-    header->pkt_type = type;
-    header->pkt_len = PATCH_HEADER_LEN;
+    header->pkt_type = LE16(type);
+    header->pkt_len = LE16(PATCH_HEADER_LEN);
     client->send_size += PATCH_HEADER_LEN;
 
     if (DEBUGGING) {
@@ -91,8 +91,8 @@ bool send_header(patch_client* client, int type) {
 /* Send the BB welcome packet. */
 bool send_welcome(patch_client* client, uint32_t cvector, uint32_t svector) {
     welcome_packet w_pkt;
-    w_pkt.header.pkt_len = PATCH_WELCOME_LENGTH;
-    w_pkt.header.pkt_type = PATCH_WELCOME_TYPE;
+    w_pkt.header.pkt_len = LE16(PATCH_WELCOME_LENGTH);
+    w_pkt.header.pkt_type = LE16(PATCH_WELCOME_TYPE);
 
     memcpy(w_pkt.copyright, copyright_message, 44);
     memset(w_pkt.padding, 0, 20);
