@@ -70,21 +70,6 @@ patch_config *server_config;
 
 void destory_client(patch_client* client);
 
-long calculate_checksum(void* data, unsigned long size)
-{
-    long offset,y,cs = 0xFFFFFFFF;
-    for (offset = 0; offset < (long)size; offset++)
-    {
-        cs ^= *(unsigned char*)((long)data + offset);
-        for (y = 0; y < 8; y++)
-        {
-            if (!(cs & 1)) cs = (cs >> 1) & 0x7FFFFFFF;
-            else cs = ((cs >> 1) & 0x7FFFFFFF) ^ 0xEDB88320;
-        }
-    }
-    return (cs ^ 0xFFFFFFFF);
-}
-
 int handle_file_check(patch_client *client) {
     file_status_packet *pkt = (file_status_packet*) client->recv_buffer;
     patch_file *patch = patches.at(pkt->patchID);
