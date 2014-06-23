@@ -11,7 +11,7 @@ if (DEBUGGING)
 endif(DEBUGGING)
 
 add_executable(patch_server
-    main.cc
+    patch_server.cc
     patch_packets.cc
     patch_server.h
     patch_packets.h
