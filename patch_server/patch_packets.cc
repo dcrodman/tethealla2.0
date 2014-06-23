@@ -37,7 +37,7 @@ extern "C" {
 /* Send the packet from the client's send buffer to the client. Will try
  until the entire packet is sent. Len indicates the total number of bytes
  that will be sent. */
-bool send_packet(patch_client* client, int len) {
+bool send_packet(patch_client *client, int len) {
     int total = 0, remaining = len;
     int bytes_sent;
 
@@ -55,6 +55,22 @@ bool send_packet(patch_client* client, int len) {
     client->send_size -= total;
 
     return true;
+}
+
+/* Send only a 4-byte header to the client. Useful for ACKs and brief messages.*/
+bool send_header(patch_client* client, int type) {
+    packet_hdr *header = (packet_hdr*) client->send_buffer;
+    header->pkt_type = type;
+    header->pkt_len = PATCH_HEADER_LEN;
+    client->send_size += PATCH_HEADER_LEN;
+
+    if (DEBUGGING) {
+        print_payload(client->send_buffer, PATCH_HEADER_LEN);
+        printf("\n");
+    }
+
+    CRYPT_CryptData(&client->server_cipher, client->send_buffer, PATCH_HEADER_LEN, 1);
+   return  send_packet(client, PATCH_HEADER_LEN);
 }
 
 /* Send the BB welcome packet. */
@@ -81,14 +97,7 @@ bool send_welcome(patch_client* client, uint32_t cvector, uint32_t svector) {
 /* Simple 4-byte acknowledgement from the server upon receipt of the client's
  4-byte ack of the welcome packet. */
 bool send_welcome_ack(patch_client* client) {
-    packet_hdr *pkt = (packet_hdr*) client->send_buffer;
-    pkt->pkt_len = 0x04;
-    pkt->pkt_type = 0x04;
-
-    client->send_size += 4;
-    CRYPT_CryptData(&client->server_cipher, &client->send_buffer, 4, 1);
-
-    return send_packet(client, 0x04);
+    return send_header(client, PATCH_HEADER_LEN);
 }
 
 // Send IP address and port # of the DATA portion of the patch server.
@@ -140,14 +149,7 @@ bool send_welcome_message(patch_client *client, packet_hdr *header,
 /* Acknowledgement sent by the DATA portion after receiving the login packet
  and before sending patch data. */
 bool send_data_ack(patch_client* client) {
-    packet_hdr *header = (packet_hdr*) client->send_buffer;
-    header->pkt_type = LE16(DATA_WELCOME_ACK);
-    header->pkt_len = LE16(0x04);
-    client->send_size += 0x04;
-
-    CRYPT_CryptData(&client->server_cipher, client->send_buffer, client->send_size, 1);
-
-    return send_packet(client, 0x04);
+    return send_header(client, DATA_WELCOME_ACK);
 }
 
 /* Tell the clinet to change directories to the one specified by dir. */
@@ -171,18 +173,8 @@ bool send_change_directory(patch_client* client, char* dir) {
 
 /* Tell the client to set the directory to one dir above. */
 bool send_dir_above(patch_client* client) {
-    packet_hdr *header = (packet_hdr*) client->send_buffer;
-    header->pkt_type = LE16(DATA_CHDIR_ABOVE);
-    header->pkt_len = LE16(0x04);
-    client->send_size += 0x04;
-
     printf("Set Dir Above:\n");
-    print_payload(client->send_buffer, 0x04);
-    printf("\n");
-
-    CRYPT_CryptData(&client->server_cipher, client->send_buffer, 0x04, 1);
-
-    return send_packet(client, 0x04);
+    return send_header(client, DATA_CHDIR_ABOVE);
 }
 
 /* Send information about a particular file to the client to verify its
@@ -209,35 +201,15 @@ bool send_check_file(patch_client* client, uint32_t index, char *filename) {
 
 /* Tell the client that we're done sending our list of patches. */
 bool send_list_done(patch_client* client) {
-    packet_hdr *header = (packet_hdr*) client->send_buffer;
-    header->pkt_type = LE16(DATA_LIST_DONE);
-    header->pkt_len = LE16(0x04);
-    client->send_size += 0x04;
-
     printf("Send List Done\n");
-    print_payload(client->send_buffer, 0x04);
-    printf("\n");
-
-    CRYPT_CryptData(&client->server_cipher, client->send_buffer, client->send_size, 1);
-
-    return send_packet(client, 0x04);
+    return send_header(client, DATA_LIST_DONE);
 }
 
 /* Sent to the client to inform them that the server has finished sending the list
  of files to check. */
 bool send_files_done(patch_client* client) {
-    packet_hdr *header = (packet_hdr*) client->send_buffer;
-    header->pkt_type = LE16(DATA_FILES_DONE);
-    header->pkt_len = LE16(0x04);
-    client->send_size += 0x04;
-
     printf("Send Files Done\n");
-    print_payload(client->send_buffer, 0x04);
-    printf("\n");
-
-    CRYPT_CryptData(&client->server_cipher, client->send_buffer, client->send_size, 1);
-
-    return send_packet(client, 0x04);
+    return send_header(client, DATA_FILES_DONE);
 }
 
 /* Sent to the client to detail the files that are about to be sent. */

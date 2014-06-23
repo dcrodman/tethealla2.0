@@ -27,6 +27,8 @@
 #ifndef tethealla_patch_packets_h
 #define tethealla_patch_packets_h
 
+#define PATCH_HEADER_LEN 0x04
+
 #define PATCH_WELCOME_LENGTH 0x04C
 #define PATCH_WELCOME_TYPE 0x02
 #define PATCH_WELCOME_ACK 0x02
@@ -130,7 +132,9 @@ struct update_files_packet {
 void print_hex_ascii_line(const u_char *payload, int len, int offset);
 void print_payload(const u_char *payload, int len);
 
-bool send_packet(patch_client* client);
+bool send_packet(patch_client *client);
+bool send_header(patch_client* client, int type);
+
 bool send_welcome(patch_client* client, uint32_t cvector, uint32_t svector);
 bool send_welcome_ack(patch_client* client);
 bool send_welcome_message(patch_client *client, packet_hdr *header,
