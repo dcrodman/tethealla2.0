@@ -169,11 +169,13 @@ int data_process_packet(patch_client *client) {
             break;
         case PATCH_LOGIN:
             result = send_data_ack(client) +
-            send_file_list(client) +
-            send_dir_above(client);
+            send_file_list(client);
             break;
         case CLIENT_FILE_STATUS:
             result = handle_file_check(client);
+            break;
+        case CLIENT_LIST_DONE:
+            result = 0;
             break;
         default:
             result = 0;

@@ -228,17 +228,36 @@ bool send_list_done(patch_client* client) {
     return send_packet(client);
 }
 
+/* Sent to the client to inform them that the server has finished sending the list
+ of files to check. */
 bool send_files_done(patch_client* client) {
     packet_hdr *header = (packet_hdr*) client->send_buffer;
     header->pkt_type = LE16(DATA_FILES_DONE);
     header->pkt_len = LE16(0x04);
     client->send_size = 0x04;
 
-    printf("Send List Done\n");
+    printf("Send Files Done\n");
     print_payload(client->send_buffer, 0x04);
     printf("\n");
 
     CRYPT_CryptData(&client->server_cipher, client->send_buffer, client->send_size, 1);
 
+    return send_packet(client);
+}
+
+/* Sent to the client to detail the files that are about to be sent. */
+bool send_update_files(patch_client *client, uint32_t total_size, uint32_t num_files) {
+    update_files_packet *packet = (update_files_packet*) client->send_buffer;
+    packet->header.pkt_type = LE16(DATA_UPDATE_FILES_TYPE);
+    packet->header.pkt_len = LE16(DATA_UPDATE_FILES_SIZE);
+    packet->total_size = total_size;
+    packet->num_files = num_files;
+
+    printf("Sending Needs Update\n");
+    print_payload(client->send_buffer, DATA_UPDATE_FILES_SIZE);
+    printf("\n");
+
+    client->send_size = DATA_UPDATE_FILES_SIZE;
+    CRYPT_CryptData(&client->server_cipher, client->send_buffer, DATA_UPDATE_FILES_SIZE, 1);
     return send_packet(client);
 }

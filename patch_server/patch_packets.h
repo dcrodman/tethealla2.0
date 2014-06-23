@@ -45,6 +45,8 @@
 
 #define CLIENT_FILE_STATUS 0x0F
 #define CLIENT_LIST_DONE 0x10
+#define DATA_UPDATE_FILES_TYPE 0x11
+#define DATA_UPDATE_FILES_SIZE 0x0C
 
 #include <cstdint>
 #include <sys/socket.h>
@@ -118,6 +120,13 @@ struct file_status_packet {
     uint32_t file_size;
 };
 
+/* Tell the client about the files we need to send. */
+struct update_files_packet {
+    packet_hdr header;
+    uint32_t total_size;
+    uint32_t num_files;
+};
+
 void print_hex_ascii_line(const u_char *payload, int len, int offset);
 void print_payload(const u_char *payload, int len);
 
@@ -134,5 +143,7 @@ bool send_dir_above(patch_client* client);
 bool send_check_file(patch_client* client, uint32_t index, char *filename);
 bool send_list_done(patch_client* client);
 bool send_files_done(patch_client* client);
+
+bool send_update_files(patch_client* client);
 
 #endif
