@@ -98,11 +98,11 @@ int handle_file_check(patch_client *client) {
     }
 
     bool missing = pkt->file_size == 0 && pkt->checksum == 0;
-    bool update = pkt->file_size != patch->file_size &&
+    bool update = pkt->file_size != patch->file_size ||
         pkt->checksum != patch->checksum;
 
     if (missing || update)
-        client->patch_list.push_back(patch);
+        client->patch_list->push_back(patch);
 
     return 0;
 }
@@ -284,6 +284,7 @@ patch_client* accept_client(int sockfd) {
     client->disconnected = false;
     client->packet_sz = 0;
     client->recv_size = 0;
+    client->patch_list = new std::list<patch_file*>;
 
     memset(client->send_buffer, 0, TCP_BUFFER_SIZE);
     memset(client->recv_buffer, 0, TCP_BUFFER_SIZE);

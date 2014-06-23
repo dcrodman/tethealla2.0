@@ -90,7 +90,7 @@ struct patch_client {
     unsigned int recv_size;
     unsigned int packet_sz;
 
-    std::list<patch_file*> patch_list;
+    std::list<patch_file*> *patch_list;
 
     bool disconnected;
 };
