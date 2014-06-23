@@ -148,6 +148,6 @@ bool send_check_file(patch_client* client, uint32_t index, char *filename);
 bool send_list_done(patch_client* client);
 bool send_files_done(patch_client* client);
 
-bool send_update_files(patch_client* client);
+bool send_update_files(patch_client *client, uint32_t total_size, uint32_t num_files);
 
 #endif

@@ -131,6 +131,19 @@ int send_file_list(patch_client* client) {
     return 0;
 }
 
+int handle_client_list_done(patch_client *client) {
+    uint32_t num_files = 0, size = 0;
+    std::list<patch_file*>::const_iterator patch, end;
+    for (patch = client->patch_list->begin(), end = client->patch_list->end(); patch != end; ++patch) {
+        size += (*patch)->file_size;
+        num_files++;
+    }
+
+    if (num_files > 0)
+        send_update_files(client, size, num_files);
+    return 0;
+}
+
 /* Process a client packet sent to the PATCH server. */
 int patch_process_packet(patch_client *client) {
     packet_hdr *header = (packet_hdr*) client->recv_buffer;
@@ -176,7 +189,7 @@ int data_process_packet(patch_client *client) {
             result = handle_file_check(client);
             break;
         case CLIENT_LIST_DONE:
-            result = 0;
+            result = handle_client_list_done(client);
             break;
         default:
             result = 0;

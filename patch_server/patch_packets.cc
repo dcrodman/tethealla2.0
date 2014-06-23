@@ -214,9 +214,12 @@ bool send_files_done(patch_client* client) {
 
 /* Sent to the client to detail the files that are about to be sent. */
 bool send_update_files(patch_client *client, uint32_t total_size, uint32_t num_files) {
+    if (num_files < 1)
+        return false;
+
     update_files_packet *packet = (update_files_packet*) client->send_buffer;
-    packet->header.pkt_type = LE16(DATA_UPDATE_FILES_TYPE);
-    packet->header.pkt_len = LE16(DATA_UPDATE_FILES_SIZE);
+    packet->header.pkt_type = LE32(DATA_UPDATE_FILES_TYPE);
+    packet->header.pkt_len = LE32(DATA_UPDATE_FILES_SIZE);
     packet->total_size = total_size;
     packet->num_files = num_files;
 
