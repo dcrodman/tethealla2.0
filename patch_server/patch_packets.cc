@@ -62,16 +62,16 @@ bool send_packet(patch_client* client) {
 /* Send the BB welcome packet. */
 bool send_welcome(patch_client* client, uint32_t cvector, uint32_t svector) {
     welcome_packet w_pkt;
-    w_pkt.header.pkt_len = BB_WELCOME_LENGTH;
-    w_pkt.header.pkt_type = BB_WELCOME_TYPE;
+    w_pkt.header.pkt_len = PATCH_WELCOME_LENGTH;
+    w_pkt.header.pkt_type = PATCH_WELCOME_TYPE;
 
     memcpy(w_pkt.copyright, copyright_message, 44);
     memset(w_pkt.padding, 0, 20);
     w_pkt.server_vector = svector;
     w_pkt.client_vector = cvector;
 
-    client->send_size = BB_WELCOME_LENGTH;
-    memcpy(client->send_buffer, &w_pkt, BB_WELCOME_LENGTH);
+    client->send_size = PATCH_WELCOME_LENGTH;
+    memcpy(client->send_buffer, &w_pkt, PATCH_WELCOME_LENGTH);
 
     if (!send_packet(client)) {
         perror("send");

@@ -86,7 +86,7 @@ long calculate_checksum(void* data, unsigned long size)
 }
 
 int handle_file_check(patch_client *client) {
-    client_file_packet *pkt = (client_file_packet*) client->recv_buffer;
+    file_status_packet *pkt = (file_status_packet*) client->recv_buffer;
     patch_file *patch = patches.at(pkt->patchID);
 
     if (DEBUGGING) {
@@ -138,10 +138,10 @@ int patch_process_packet(patch_client *client) {
 
     bool result;
     switch (header->pkt_type) {
-        case BB_WELCOME_ACK:
+        case PATCH_WELCOME_ACK:
             result = send_welcome_ack(client);
             break;
-        case BB_PATCH_LOGIN:
+        case PATCH_LOGIN:
             result = send_welcome_message(client, header,
                     server_config->welcome_message, server_config->welcome_size);
             if (!result)
@@ -164,15 +164,15 @@ int data_process_packet(patch_client *client) {
 
     bool result;
     switch (header->pkt_type) {
-        case BB_WELCOME_ACK:
+        case PATCH_WELCOME_ACK:
             result = send_welcome_ack(client);
             break;
-        case BB_PATCH_LOGIN:
+        case PATCH_LOGIN:
             result = send_data_ack(client) +
             send_file_list(client) +
             send_dir_above(client);
             break;
-        case DATA_CLIENT_FILE_TYPE:
+        case CLIENT_FILE_STATUS:
             result = handle_file_check(client);
             break;
         default:

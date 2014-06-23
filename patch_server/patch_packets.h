@@ -27,10 +27,10 @@
 #ifndef tethealla_patch_packets_h
 #define tethealla_patch_packets_h
 
-#define BB_WELCOME_LENGTH 0x04C
-#define BB_WELCOME_TYPE 0x02
-#define BB_WELCOME_ACK 0x02
-#define BB_PATCH_LOGIN 0x04
+#define PATCH_WELCOME_LENGTH 0x04C
+#define PATCH_WELCOME_TYPE 0x02
+#define PATCH_WELCOME_ACK 0x02
+#define PATCH_LOGIN 0x04
 #define PATCH_WELCOME_MSG 0x13
 #define PATCH_REDIRECT 0x14
 
@@ -43,8 +43,8 @@
 #define DATA_LIST_DONE 0x0D
 #define DATA_FILES_DONE 0x12
 
-#define DATA_CLIENT_FILE_TYPE 0x0F
-#define DATA_CLIENT_LIST_DONE 0x10
+#define CLIENT_FILE_STATUS 0x0F
+#define CLIENT_LIST_DONE 0x10
 
 #include <cstdint>
 #include <sys/socket.h>
@@ -111,7 +111,7 @@ struct check_file_packet {
 };
 
 /* File status as reported by the client. */
-struct client_file_packet {
+struct file_status_packet {
     packet_hdr header;
     uint32_t patchID;
     uint32_t checksum;
