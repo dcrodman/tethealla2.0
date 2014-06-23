@@ -45,10 +45,17 @@
 #define DATA_LIST_DONE 0x0D
 #define DATA_FILES_DONE 0x12
 
+// Defined by Tethealla to be the max amount of data to send?
+#define FILE_SEND_MAX 24576
+
 #define CLIENT_FILE_STATUS 0x0F
 #define CLIENT_LIST_DONE 0x10
 #define DATA_UPDATE_FILES_TYPE 0x11
 #define DATA_UPDATE_FILES_SIZE 0x0C
+#define DATA_SEND_FILE_INFO_TYPE 0x06
+#define DATA_SEND_FILE_INFO_SIZE 0x3C
+#define DATA_SEND_FILE 0x07
+#define DATA_FILE_COMPLETE 0x08
 
 #include <cstdint>
 #include <sys/socket.h>
@@ -129,8 +136,31 @@ struct update_files_packet {
     uint32_t num_files;
 };
 
-void print_hex_ascii_line(const u_char *payload, int len, int offset);
-void print_payload(const u_char *payload, int len);
+/* Tell the client about the file we're about to send. */
+struct file_info_packet {
+    packet_hdr header;
+    uint32_t padding;
+    uint32_t file_size;
+    // Why would this be longer than the filename in check_file_pkt?
+    char filename[48];
+};
+
+/* Send the client a chunk of data from a file. */
+struct send_file_packet {
+    packet_hdr header;
+    uint32_t chnk_num;
+    uint32_t chnk_checksum;
+    uint32_t data_size;
+    char data[FILE_SEND_MAX];
+};
+
+/* Tell the client we've finished with the file. */
+struct file_finished_packet {
+    packet_hdr header;
+    uint32_t padding;
+};
+
+long calculate_checksum(void* data, unsigned long size);
 
 bool send_packet(patch_client *client);
 bool send_header(patch_client* client, int type);
@@ -149,5 +179,8 @@ bool send_list_done(patch_client* client);
 bool send_files_done(patch_client* client);
 
 bool send_update_files(patch_client *client, uint32_t total_size, uint32_t num_files);
+bool send_file_info(patch_client *client, patch_file *patch);
+int send_file(patch_client *client, patch_file *patch);
+int send_file_finished(patch_client *client);
 
 #endif

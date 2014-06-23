@@ -91,7 +91,11 @@ struct patch_client {
     unsigned int recv_size;
     unsigned int packet_sz;
 
+    int dir_steps;
     std::list<patch_file*> *patch_list;
+    bool sending_files;
+    uint32_t cur_chunk;
+    uint32_t patch_sent;
 
     bool disconnected;
 };

@@ -246,3 +246,35 @@ bool send_update_files(patch_client *client, uint32_t total_size, uint32_t num_f
     CRYPT_CryptData(&client->server_cipher, client->send_buffer, DATA_UPDATE_FILES_SIZE, 1);
     return send_packet(client, DATA_UPDATE_FILES_SIZE);
 }
+
+bool send_file_info(patch_client *client, patch_file *patch) {
+    file_info_packet *pkt = (file_info_packet*) client->send_buffer;
+    memset(pkt, 0, DATA_SEND_FILE_INFO_SIZE);
+    pkt->header.pkt_type = LE16(DATA_SEND_FILE_INFO_TYPE);
+    pkt->header.pkt_len = LE16(DATA_SEND_FILE_INFO_SIZE);
+    client->send_size += pkt->header.pkt_len;
+    pkt->file_size = patch->file_size;
+    memcpy(pkt->filename, patch->filename, strlen(patch->filename));
+
+    printf("Sending file info\n");
+    print_payload(client->send_buffer, DATA_SEND_FILE_INFO_SIZE);
+    printf("\n");
+
+    CRYPT_CryptData(&client->server_cipher, client->send_buffer, DATA_SEND_FILE_INFO_SIZE, 1);
+    return send_packet(client, DATA_SEND_FILE_INFO_SIZE);
+}
+
+/* Tell the client that we're finished with the file we were sending. */
+int send_file_finished(patch_client *client) {
+    file_finished_packet *pkt = (file_finished_packet*) client->send_buffer;
+    pkt->header.pkt_type = LE16(DATA_FILE_COMPLETE);
+    pkt->header.pkt_len = LE16(DATA_FILE_COMPLETE);
+    pkt->padding = 0;
+
+    printf("Sending file done\n");
+    print_payload(client->send_buffer, DATA_FILE_COMPLETE);
+    printf("\n");
+
+    CRYPT_CryptData(&client->server_cipher, client->send_buffer, DATA_FILE_COMPLETE, 1);
+    return send_packet(client, DATA_FILE_COMPLETE);
+}

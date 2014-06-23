@@ -238,12 +238,13 @@ int receive_from_client(patch_client *client) {
     // By now we've received the whole packet.
     CRYPT_CryptData(&client->client_cipher, client->recv_buffer + 4, client->packet_sz - 4, 0);
 
+handle:
+
     if (DEBUGGING) {
         printf("Received %lu bytes from %s\n", bytes + 4, client->ip_addr_str);
         print_payload(client->recv_buffer, int(bytes));
     }
 
-handle:
     if (client->session == PATCH)
         patch_process_packet(client);
     else
@@ -280,9 +281,8 @@ patch_client* accept_client(int sockfd) {
     }
     client->socket = clientfd;
     client->disconnected = false;
-    client->packet_sz = 0;
-    client->recv_size = 0;
     client->patch_list = new std::list<patch_file*>;
+    client->sending_files = false;
 
     memset(client->send_buffer, 0, TCP_BUFFER_SIZE);
     memset(client->recv_buffer, 0, TCP_BUFFER_SIZE);
@@ -331,6 +331,7 @@ void handle_connections(int patchfd, int datafd) {
     fd_set readfds, writefds, master;
     int fd_max = (patchfd > datafd) ? patchfd : datafd;
     int select_result = 0;
+    std::list<patch_client*>::const_iterator c, end;
     
     timeval timeout = { .tv_sec = 10 };
     
@@ -343,6 +344,12 @@ void handle_connections(int patchfd, int datafd) {
 
     while (1) {
         readfds = master;
+
+        // Add the client to our writefd set if we're in the process of sending them files.
+        for (c = connections.begin(), end = connections.end(); c != end; ++c) {
+            if ((*c)->sending_files)
+                FD_SET((*c)->socket, &writefds);
+        }
 
         if ((select_result = select(fd_max + 1, &readfds, &writefds, NULL, &timeout))) {
             // Check the sockets listening for new connections.
@@ -368,7 +375,6 @@ void handle_connections(int patchfd, int datafd) {
             }
             
             // Iterate over the connected clients.
-            std::list<patch_client*>::const_iterator c, end;
             for (c = connections.begin(), end = connections.end(); c != end; ++c) {
                 printf("Checking client %s\n", (*c)->ip_addr_str);
 
@@ -453,12 +459,13 @@ int load_patches(const char* dirname) {
             // (and really anything else) will be ignored.
             if (file->d_type == DT_REG) {
                 patch_file *patch_entry = (patch_file*) malloc(sizeof(patch_file));
-                memcpy(patch_entry->filename, file->d_name, strlen(file->d_name) + 1);
+                int fname_len = strlen(file->d_name);
+                memcpy(patch_entry->filename, file->d_name, fname_len + 1);
 
                 // Path relative to the PSOBB working directory.
                 strncat(patch_entry->relative_path, dirname, strlen(dirname));
                 strncat(patch_entry->relative_path, "/", 1);
-                strncat(patch_entry->relative_path, file->d_name, strlen(file->d_name));
+                strncat(patch_entry->relative_path, file->d_name, fname_len);
 
                 FILE* fd = fopen(patch_entry->relative_path, "r");
                 if (fd == NULL) {
@@ -490,6 +497,7 @@ int load_patches(const char* dirname) {
                             strlen(patch_entry->path_dirs[i]));
                     strncat(patch_entry->full_path, "/", 1);
                 }
+                strncat(patch_entry->full_path, patch_entry->filename, fname_len);
 
                 if (DEBUGGING) {
                     printf("File: %s\t\t", patch_entry->filename);
