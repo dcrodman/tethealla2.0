@@ -29,6 +29,7 @@
 
 #include <iostream>
 #include <sys/socket.h>
+#include <list>
 
 extern "C" {
     #include "encryption.h"
@@ -56,6 +57,19 @@ struct patch_config {
     uint32_t welcome_size;
 };
 
+/* Patch information associated with each file in the patches directory. */
+struct patch_file {
+    char filename[NAME_MAX];
+    char full_path[PATH_MAX + NAME_MAX];
+    uint32_t file_size;
+    uint32_t checksum;
+    uint32_t index;
+    // Depth of enclosing folder relative to patches (and thus psobb) directory.
+    int patch_steps;
+    // Array containing the path directory components of the file.
+    char **path_dirs;
+};
+
 /* Structure for representing connected clients. */
 struct patch_client {
     int socket;
@@ -76,20 +90,9 @@ struct patch_client {
     unsigned int recv_size;
     unsigned int packet_sz;
 
-    bool disconnected;
-};
+    std::list<patch_file*> patch_list;
 
-/* Patch information associated with each file in the patches directory. */
-struct patch_file {
-    char filename[NAME_MAX];
-    char full_path[PATH_MAX + NAME_MAX];
-    uint32_t file_size;
-    uint32_t checksum;
-    uint32_t index;
-    // Depth of enclosing folder relative to patches (and thus psobb) directory.
-    int patch_steps;
-    // Array containing the path directory components of the file.
-    char **path_dirs;
+    bool disconnected;
 };
 
 #endif

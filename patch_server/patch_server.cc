@@ -97,11 +97,12 @@ int handle_file_check(patch_client *client) {
         printf("Size: %u bytes\n", pkt->file_size);
     }
 
-    if (pkt->file_size != patch->file_size ||
-            pkt->checksum != patch->checksum) {
-        printf("Updating file\n");
-        // TODO: Process updating file.
-    }
+    bool missing = pkt->file_size == 0 && pkt->checksum == 0;
+    bool update = pkt->file_size != patch->file_size &&
+        pkt->checksum != patch->checksum;
+
+    if (missing || update)
+        client->patch_list.push_back(patch);
 
     return 0;
 }
