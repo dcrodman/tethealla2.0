@@ -79,7 +79,7 @@ int handle_file_check(patch_client *client) {
         printf("Filename: %s\n", patch->filename);
         printf("Index: %u\n", pkt->patchID);
         printf("Checksum: %08x\n", pkt->checksum);
-        printf("Size: %u bytes\n", pkt->file_size);
+        printf("Size: %u bytes\n\n", pkt->file_size);
     }
 
     bool missing = pkt->file_size == 0 && pkt->checksum == 0;
@@ -96,7 +96,7 @@ int handle_file_check(patch_client *client) {
 int send_file_list(patch_client* client) {
     //Iterate over the connected clients.
     std::vector<patch_file*>::const_iterator patch, end;
-    char tmp[2] = "*";
+    char tmp[2] = ".";
     send_change_directory(client, tmp);
     for (patch = patches.begin(), end = patches.end(); patch != end; ++patch) {
         while (client->dir_steps != (*patch)->patch_steps) {
@@ -113,9 +113,63 @@ int send_file_list(patch_client* client) {
         }
         send_check_file(client, (*patch)->index, (*patch)->filename);
     }
+    /*
+    while (client->dir_steps > 0) {
+        send_dir_above(client);
+        client->dir_steps--;
+    }
+     */
     client->dir_steps = 0;
+
+    send_dir_above(client);
     send_list_done(client);
     return 0;
+}
+
+/* Check to see if we have any files to send the client. Returns 0 if not,
+ -1 on error or 1 if data was sent successfully. */
+int sending_client_file(patch_client *client) {
+    if (!client->sending_files)
+        return 0;
+
+    // End the session if we've sent all of our patch data.
+    if (client->patch_list->empty()) {
+        client->sending_files = false;
+        send_dir_above(client);
+        send_files_done(client);
+        return 0;
+    }
+
+    patch_file *patch = client->patch_list->back();
+    printf("Sending patch %s\n", patch->filename);
+    if (client->cur_chunk == 0) {
+        // Make sure we're in the right directory.
+        while (client->dir_steps < patch->patch_steps) {
+            client->dir_steps++;
+            send_change_directory(client, patch->path_dirs[client->dir_steps]);
+        }
+        send_file_info(client, patch);
+    }
+
+    // Send the next chunk of the file.
+    // TODO: handle this upon erroring out
+    int sent = send_file(client, patch);
+    client->cur_chunk++;
+    client->patch_sent += sent;
+
+    // Did we finish the file?
+    if (client->patch_sent >= patch->file_size) {
+        send_file_finished(client);
+        // Move back to the base install directory.
+        while (client->dir_steps > 0) {
+            client->dir_steps--;
+            send_dir_above(client);
+        }
+
+        client->cur_chunk = client->patch_sent = 0;
+        client->patch_list->pop_back();
+    }
+    return 1;
 }
 
 int handle_client_list_done(patch_client *client) {
@@ -126,8 +180,14 @@ int handle_client_list_done(patch_client *client) {
         num_files++;
     }
 
-    if (num_files > 0)
+    if (num_files > 0) {
         send_update_files(client, size, num_files);
+        client->sending_files = true;
+        send_change_directory(client, ".");
+        sending_client_file(client);
+    } else
+        // We don't have anything to send the client.
+        send_files_done(client);
     return 0;
 }
 
@@ -245,6 +305,7 @@ handle:
     if (DEBUGGING) {
         printf("Received %lu bytes from %s\n", bytes + 4, client->ip_addr_str);
         print_payload(client->recv_buffer, int(bytes));
+        printf("\n");
     }
 
     if (client->session == PATCH)
