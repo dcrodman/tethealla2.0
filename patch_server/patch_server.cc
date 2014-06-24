@@ -94,24 +94,26 @@ int handle_file_check(patch_client *client) {
 
 /* Handle sending the entire file list to the client. */
 int send_file_list(patch_client* client) {
-    int client_steps = 0;
     //Iterate over the connected clients.
     std::vector<patch_file*>::const_iterator patch, end;
+    char tmp[2] = "*";
+    send_change_directory(client, tmp);
     for (patch = patches.begin(), end = patches.end(); patch != end; ++patch) {
-        while (client_steps != (*patch)->patch_steps) {
-            if (client_steps < (*patch)->patch_steps) {
+        while (client->dir_steps != (*patch)->patch_steps) {
+            if (client->dir_steps < (*patch)->patch_steps) {
                 // We need to dig into the file hierarchy until we're in the same dir.
-                client_steps++;
-                send_change_directory(client, (*patch)->path_dirs[client_steps]);
+                client->dir_steps++;
+                send_change_directory(client, (*patch)->path_dirs[client->dir_steps]);
             } else {
                 // Back up until we're in the same dir. From here we can change dir back
                 // to where we need to go.
-                client_steps--;
+                client->dir_steps--;
                 send_dir_above(client);
             }
         }
         send_check_file(client, (*patch)->index, (*patch)->filename);
     }
+    client->dir_steps = 0;
     send_list_done(client);
     return 0;
 }
