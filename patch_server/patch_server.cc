@@ -330,68 +330,71 @@ patch_client* accept_client(int sockfd) {
 
 /* Handle incoming connections to both the PATCH and DATA portions. */
 void handle_connections(int patchfd, int datafd) {
-    fd_set readfds, writefds, master;
-    int fd_max = (patchfd > datafd) ? patchfd : datafd;
+    fd_set readfds, writefds, exceptfds;
+    int fd_max;
     int select_result = 0;
     std::list<patch_client*>::const_iterator c, end;
     
     timeval timeout = { .tv_sec = 10 };
-    
-    FD_ZERO(&master);
-    FD_SET(patchfd, &master);
-    FD_SET(datafd, &master);
-    
-    FD_ZERO(&readfds);
-    FD_ZERO(&writefds);
 
     while (1) {
-        readfds = master;
+        FD_ZERO(&readfds);
+        FD_ZERO(&writefds);
+        FD_ZERO(&exceptfds);
+        fd_max = (patchfd > datafd) ? patchfd : datafd;
 
-        // Add the client to our writefd set if we're in the process of sending them files.
+        FD_SET(patchfd, &readfds);
+        FD_SET(datafd, &readfds);
+
+        // Add the connected clients to our FD_SETs.
         for (c = connections.begin(), end = connections.end(); c != end; ++c) {
+            FD_SET((*c)->socket, &readfds);
+            FD_SET((*c)->socket, &exceptfds);
             if ((*c)->sending_files)
                 FD_SET((*c)->socket, &writefds);
+
+            if ((*c)->socket > fd_max)
+                fd_max = (*c)->socket;
         }
 
-        if ((select_result = select(fd_max + 1, &readfds, &writefds, NULL, &timeout))) {
+        if ((select_result = select(fd_max + 1, &readfds, &writefds, &exceptfds, &timeout))) {
             // Check the sockets listening for new connections.
             if (FD_ISSET(patchfd, &readfds)) {
                 // New connection to PATCH port
                 printf("Accepting connection to PATCH...\n");
                 patch_client *client = accept_client(patchfd);
-                if (client) {
-                    FD_SET(client->socket, &master);
-                    fd_max = (client->socket > fd_max) ? client->socket : fd_max;
+                if (client)
                     client->session = PATCH;
-                }
             }
             if (FD_ISSET(datafd, &readfds)) {
                 // New connection to DATA port
                 printf("Accepting connection to DATA...\n");
                 patch_client *client = accept_client(datafd);
-                if (client) {
-                    FD_SET(client->socket, &master);
-                    fd_max = (client->socket > fd_max) ? client->socket : fd_max;
+                if (client)
                     client->session = DATA;
-                }
             }
             
             // Iterate over the connected clients.
             for (c = connections.begin(), end = connections.end(); c != end; ++c) {
-                printf("Checking client %s\n", (*c)->ip_addr_str);
-
+                if (DEBUGGING)
+                    printf("Checking client %s\n", (*c)->ip_addr_str);
                 if (FD_ISSET((*c)->socket, &readfds)) {
                     if (receive_from_client((*c)) == 1) {
-                        FD_CLR((*c)->socket, &master);
-                        // TODO: correctly reset fd_max if needed.
-                        fd_max = datafd;
+                        close((*c)->socket);
                         destory_client(*c);
                         connections.erase(c++);
                         continue;
                     }
                 }
-                if (FD_ISSET((*c)->socket, &writefds)) {
-                    printf("Could send something to %d\n", (*c)->socket);
+                // Are we sending the client files?
+                if (FD_ISSET((*c)->socket, &writefds))
+                    sending_client_file(*c);
+                if (FD_ISSET((*c)->socket, &exceptfds)) {
+                    if (DEBUGGING)
+                        printf("Exception on socket %d\n", (*c)->socket);
+                    close((*c)->socket);
+                    destory_client(*c);
+                    connections.erase(c++);
                 }
             }
         } else if (select_result == -1) {
@@ -399,7 +402,6 @@ void handle_connections(int patchfd, int datafd) {
             exit(5);
         } else {
             // We timed out.
-            printf("Timed out\n");
         }
     }
 }
