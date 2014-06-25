@@ -161,7 +161,6 @@ int sending_client_file(patch_client *client) {
             client->dir_steps--;
             send_dir_above(client);
         }
-
         client->cur_chunk = client->patch_sent = 0;
         client->patch_list->pop_back();
     }

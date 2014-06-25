@@ -280,10 +280,10 @@ int send_file(patch_client *client, patch_file *patch) {
         return -1;
     }
     fseek(file, client->patch_sent, SEEK_SET);
-    int read = fread(pkt->data + client->patch_sent, 1, FILE_SEND_MAX, file);
+    int read = fread(pkt->data, 1, FILE_SEND_MAX, file);
     fclose(file);
 
-    pkt->chnk_checksum = LE32(calculate_checksum(pkt->data + client->patch_sent, read));
+    pkt->chnk_checksum = LE32(calculate_checksum(pkt->data, read));
 
     int total_sz = read;
     // Make sure that the amount of data we're sending is divisble by 4.
@@ -296,11 +296,11 @@ int send_file(patch_client *client, patch_file *patch) {
     client->send_size += pkt->header.pkt_len;
 
     printf("Sending file %s, chunk #%d\n", patch->filename, client->cur_chunk);
-    print_payload(client->send_buffer, pkt->header.pkt_len);
+    print_payload(client->send_buffer, length);
     printf("\n");
 
     CRYPT_CryptData(&client->server_cipher, client->send_buffer, length, 1);
-    return (send_packet(client, pkt->header.pkt_len)) ? read : -1;
+    return (send_packet(client, length)) ? read : -1;
 }
 
 /* Tell the client that we're finished with the file we were sending. */
