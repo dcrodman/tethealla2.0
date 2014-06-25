@@ -74,13 +74,13 @@ int handle_file_check(patch_client *client) {
     file_status_packet *pkt = (file_status_packet*) client->recv_buffer;
     patch_file *patch = patches.at(pkt->patchID);
 
-    if (DEBUGGING) {
+#ifdef DEBUGGING
         printf("Checking file:\n");
         printf("Filename: %s\n", patch->filename);
         printf("Index: %u\n", pkt->patchID);
         printf("Checksum: %08x\n", pkt->checksum);
         printf("Size: %u bytes\n\n", pkt->file_size);
-    }
+#endif
 
     bool missing = pkt->file_size == 0 && pkt->checksum == 0;
     bool update = pkt->file_size != patch->file_size ||
@@ -300,11 +300,11 @@ int receive_from_client(patch_client *client) {
 
 handle:
 
-    if (DEBUGGING) {
+#ifdef DEBUGGING
         printf("Received %lu bytes from %s\n", bytes + 4, client->ip_addr_str);
         print_payload(client->recv_buffer, int(bytes));
         printf("\n");
-    }
+#endif
 
     if (client->session == PATCH)
         patch_process_packet(client);
@@ -435,8 +435,9 @@ void handle_connections(int patchfd, int datafd) {
             
             // Iterate over the connected clients.
             for (c = connections.begin(), end = connections.end(); c != end; ++c) {
-                if (DEBUGGING)
+#ifdef DEBUGGING
                     printf("Checking client %s\n", (*c)->ip_addr_str);
+#endif
                 if (FD_ISSET((*c)->socket, &readfds)) {
                     if (receive_from_client((*c)) == 1) {
                     remove_client:
@@ -453,8 +454,9 @@ void handle_connections(int patchfd, int datafd) {
                         goto remove_client;
                 }
                 if (FD_ISSET((*c)->socket, &exceptfds)) {
-                    if (DEBUGGING)
+#ifdef DEBUGGING
                         printf("Exception on socket %d\n", (*c)->socket);
+#endif
                     close((*c)->socket);
                     destory_client(*c);
                     connections.erase(c++);
@@ -566,12 +568,10 @@ int load_patches(const char* dirname) {
                 }
                 strncat(patch_entry->full_path, patch_entry->filename, fname_len);
 
-                if (DEBUGGING) {
-                    printf("File: %s\t\t", patch_entry->filename);
-                    printf("Size: %u bytes, ", patch_entry->file_size);
-                    printf("Checksum: %08x, ", patch_entry->checksum);
-                    printf("Index: %u\n", patch_entry->index);
-                }
+                printf("File: %s\t\t", patch_entry->filename);
+                printf("Size: %u bytes, ", patch_entry->file_size);
+                printf("Checksum: %08x, ", patch_entry->checksum);
+                printf("Index: %u\n", patch_entry->index);
 
                 // Add each patch to the end so that their index will match their position in the
                 // list for O(1) lookups.

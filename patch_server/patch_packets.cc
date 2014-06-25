@@ -79,10 +79,10 @@ bool send_header(patch_client* client, int type) {
     header->pkt_len = LE16(PATCH_HEADER_LEN);
     client->send_size += PATCH_HEADER_LEN;
 
-    if (DEBUGGING) {
+#ifdef DEBUGGING
         print_payload(client->send_buffer, PATCH_HEADER_LEN);
         printf("\n");
-    }
+#endif
 
     CRYPT_CryptData(&client->server_cipher, client->send_buffer, PATCH_HEADER_LEN, 1);
    return  send_packet(client, PATCH_HEADER_LEN);
@@ -164,7 +164,6 @@ bool send_welcome_message(patch_client *client, packet_hdr *header,
 /* Acknowledgement sent by the DATA portion after receiving the login packet
  and before sending patch data. */
 bool send_data_ack(patch_client* client) {
-    printf("Send Data ACK\n");
     return send_header(client, DATA_WELCOME_ACK);
 }
 
@@ -178,9 +177,11 @@ bool send_change_directory(patch_client* client, const char* dir) {
     strcpy(pkt->dirname, dir);
     client->send_size += DATA_CHDIR_SIZE;
 
-    printf("Change Directory:\n");
-    print_payload(client->send_buffer, DATA_CHDIR_SIZE);
-    printf("\n");
+#ifdef DEBUGGING
+        printf("Change Directory:\n");
+        print_payload(client->send_buffer, DATA_CHDIR_SIZE);
+        printf("\n");
+#endif
 
     CRYPT_CryptData(&client->server_cipher, client->send_buffer, DATA_CHDIR_SIZE, 1);
 
@@ -189,7 +190,9 @@ bool send_change_directory(patch_client* client, const char* dir) {
 
 /* Tell the client to set the directory to one dir above. */
 bool send_dir_above(patch_client* client) {
-    printf("Set Dir Above:\n");
+#ifdef DEBUGGING
+        printf("Set Dir Above:\n");
+#endif
     return send_header(client, DATA_CHDIR_ABOVE);
 }
 
@@ -205,9 +208,11 @@ bool send_check_file(patch_client* client, uint32_t index, char *filename) {
     pkt->patchID = LE32(index);
     strcpy(pkt->filename, filename);
 
-    printf("Send File Check\n");
-    print_payload(client->send_buffer, DATA_CHKFILE_SIZE);
-    printf("\n");
+#ifdef DEBUGGING
+        printf("Send File Check\n");
+        print_payload(client->send_buffer, DATA_CHKFILE_SIZE);
+        printf("\n");
+#endif
 
     client->send_size += DATA_CHKFILE_SIZE;
     CRYPT_CryptData(&client->server_cipher, client->send_buffer, DATA_CHKFILE_SIZE, 1);
@@ -217,14 +222,18 @@ bool send_check_file(patch_client* client, uint32_t index, char *filename) {
 
 /* Tell the client that we're done sending our list of patches. */
 bool send_list_done(patch_client* client) {
-    printf("Send List Done\n");
+#ifdef DEBUGGING
+        printf("Send List Done\n");
+#endif
     return send_header(client, DATA_LIST_DONE);
 }
 
 /* Sent to the client to inform them that the server has finished sending the list
  of files to check. */
 bool send_files_done(patch_client* client) {
-    printf("Send Files Done\n");
+#ifdef DEBUGGING
+        printf("Send Files Done\n");
+#endif
     return send_header(client, DATA_FILES_DONE);
 }
 
@@ -239,9 +248,11 @@ bool send_update_files(patch_client *client, uint32_t total_size, uint32_t num_f
     packet->total_size = total_size;
     packet->num_files = num_files;
 
-    printf("Sending Needs Update\n");
-    print_payload(client->send_buffer, DATA_UPDATE_FILES_SIZE);
-    printf("\n");
+#ifdef DEBUGGING
+        printf("Sending Needs Update\n");
+        print_payload(client->send_buffer, DATA_UPDATE_FILES_SIZE);
+        printf("\n");
+#endif
 
     client->send_size += DATA_UPDATE_FILES_SIZE;
     CRYPT_CryptData(&client->server_cipher, client->send_buffer, DATA_UPDATE_FILES_SIZE, 1);
@@ -258,9 +269,11 @@ bool send_file_info(patch_client *client, patch_file *patch) {
     pkt->file_size = LE32(patch->file_size);
     memcpy(pkt->filename, patch->filename, strlen(patch->filename));
 
-    printf("Sending file info\n");
-    print_payload(client->send_buffer, DATA_SEND_FILE_INFO_SIZE);
-    printf("\n");
+#ifdef DEBUGGING
+        printf("Sending file info\n");
+        print_payload(client->send_buffer, DATA_SEND_FILE_INFO_SIZE);
+        printf("\n");
+#endif
 
     CRYPT_CryptData(&client->server_cipher, client->send_buffer, DATA_SEND_FILE_INFO_SIZE, 1);
     return send_packet(client, DATA_SEND_FILE_INFO_SIZE);
@@ -295,9 +308,11 @@ int send_file(patch_client *client, patch_file *patch) {
     pkt->header.pkt_len = LE16(length);
     client->send_size += pkt->header.pkt_len;
 
-    printf("Sending file %s, chunk #%d\n", patch->filename, client->cur_chunk);
-    print_payload(client->send_buffer, length);
-    printf("\n");
+#ifdef DEBUGGING
+        printf("Sending file %s, chunk #%d\n", patch->filename, client->cur_chunk);
+        print_payload(client->send_buffer, length);
+        printf("\n");
+#endif
 
     CRYPT_CryptData(&client->server_cipher, client->send_buffer, length, 1);
     return (send_packet(client, length)) ? read : -1;
@@ -310,9 +325,11 @@ int send_file_finished(patch_client *client) {
     pkt->header.pkt_len = LE16(DATA_FILE_COMPLETE);
     pkt->padding = 0;
 
-    printf("Sending file complete\n");
-    print_payload(client->send_buffer, DATA_FILE_COMPLETE);
-    printf("\n");
+#ifdef DEBUGGING
+        printf("Sending file complete\n");
+        print_payload(client->send_buffer, DATA_FILE_COMPLETE);
+        printf("\n");
+#endif
 
     CRYPT_CryptData(&client->server_cipher, client->send_buffer, DATA_FILE_COMPLETE, 1);
     return send_packet(client, DATA_FILE_COMPLETE);
