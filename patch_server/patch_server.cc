@@ -137,7 +137,6 @@ int sending_client_file(patch_client *client) {
     }
 
     patch_file *patch = client->patch_list->back();
-    printf("Sending patch %s\n", patch->filename);
     if (client->cur_chunk == 0) {
         // Make sure we're in the right directory.
         while (client->dir_steps < patch->patch_steps) {
@@ -320,9 +319,11 @@ handle:
     return 0;
 }
 
-/* Free the memory associated with a client. */
+/* Close a client socket and free the memory associated with its structure. */
 void destory_client(patch_client* client) {
+    close(client->socket);
     free(client->ip_addr_str);
+    free(client->patch_list);
     free(client);
 }
 
@@ -330,7 +331,6 @@ void destory_client(patch_client* client) {
  the session and send them the welcome packet. If the welcome packet
  fails, return NULL as the client will have been disconnected. */
 patch_client* accept_client(int sockfd) {
-    // TODO: Check to see whether a client is connecting multiple times.
     sockaddr_storage clientaddr;
     socklen_t addrsize = sizeof clientaddr;
     patch_client* client = (patch_client*) malloc(sizeof(patch_client));
@@ -364,7 +364,20 @@ patch_client* accept_client(int sockfd) {
         client->ip_addr_str = (char*) malloc(INET6_ADDRSTRLEN);
         inet_ntop(AF_INET6, &(ip->sin6_addr), client->ip_addr_str, INET6_ADDRSTRLEN);
     }
-    
+
+    /* We have to wait until we know the client's IP to perform this check, but now we
+     can test to see if a client is trying to connect multiple times from the same
+     IP address. I'm sure there's a sneakier way to do this, but string comparison
+     will have to do for now. */
+    std::list<patch_client*>::const_iterator c, end;
+    for (c = connections.begin(), end = connections.end(); c != end; ++c) {
+        if (strcmp(client->ip_addr_str, (*c)->ip_addr_str) == 0) {
+            destory_client(client);
+            return NULL;
+        }
+    }
+
+
     /* Generate the encryption keys for the client and server.*/
     static std::mt19937 rand_gen(time(NULL));
     static std::uniform_int_distribution<uint32_t> dist(0, UINT32_MAX);
@@ -420,17 +433,19 @@ void handle_connections(int patchfd, int datafd) {
             // Check the sockets listening for new connections.
             if (FD_ISSET(patchfd, &readfds)) {
                 // New connection to PATCH port
-                printf("Accepting connection to PATCH...\n");
                 patch_client *client = accept_client(patchfd);
-                if (client)
+                if (client) {
                     client->session = PATCH;
+                    printf("Accepted connection to PATCH from %s\n", client->ip_addr_str);
+                }
             }
             if (FD_ISSET(datafd, &readfds)) {
                 // New connection to DATA port
-                printf("Accepting connection to DATA...\n");
                 patch_client *client = accept_client(datafd);
-                if (client)
+                if (client) {
                     client->session = DATA;
+                    printf("Accepted connection to DATA from %s\n", client->ip_addr_str);
+                }
             }
             
             // Iterate over the connected clients.
@@ -441,7 +456,6 @@ void handle_connections(int patchfd, int datafd) {
                 if (FD_ISSET((*c)->socket, &readfds)) {
                     if (receive_from_client((*c)) == 1) {
                     remove_client:
-                        close((*c)->socket);
                         destory_client(*c);
                         connections.erase(c++);
                         continue;
@@ -457,7 +471,6 @@ void handle_connections(int patchfd, int datafd) {
 #ifdef DEBUGGING
                         printf("Exception on socket %d\n", (*c)->socket);
 #endif
-                    close((*c)->socket);
                     destory_client(*c);
                     connections.erase(c++);
                 }

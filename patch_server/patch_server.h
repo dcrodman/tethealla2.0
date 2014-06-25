@@ -79,7 +79,6 @@ struct patch_client {
     server session;
 
     char* ip_addr_str;
-    sockaddr_storage ip_addr;
     
     CRYPT_SETUP client_cipher;
     CRYPT_SETUP server_cipher;
