@@ -107,7 +107,8 @@ void CRYPT_GC_CryptData(CRYPT_SETUP* c,void* data,unsigned long size)
     while (address_start < address_end)
     {
         tmp = CRYPT_GC_GetNextKey(c);
-        *address_start++ = *address_start ^ LE32(tmp);
+        *address_start = *address_start ^ LE32(tmp);
+        address_start++;
     }
 }
 
