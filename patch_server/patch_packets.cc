@@ -276,8 +276,7 @@ int send_file(patch_client *client, patch_file *patch) {
     // Offset into the file by however much we've already sent.
     FILE *file = fopen(patch->full_path, "r");
     if (!file) {
-        if (ferror(file))
-            printf("Error opening %s for sending\n", patch->filename);
+        printf("Error opening %s for sending\n", patch->filename);
         return -1;
     }
     fseek(file, client->patch_sent, SEEK_SET);

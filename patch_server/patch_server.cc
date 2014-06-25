@@ -96,8 +96,7 @@ int handle_file_check(patch_client *client) {
 int send_file_list(patch_client* client) {
     //Iterate over the connected clients.
     std::vector<patch_file*>::const_iterator patch, end;
-    char tmp[2] = ".";
-    send_change_directory(client, tmp);
+    send_change_directory(client, ".");
     for (patch = patches.begin(), end = patches.end(); patch != end; ++patch) {
         while (client->dir_steps != (*patch)->patch_steps) {
             if (client->dir_steps < (*patch)->patch_steps) {
@@ -113,13 +112,10 @@ int send_file_list(patch_client* client) {
         }
         send_check_file(client, (*patch)->index, (*patch)->filename);
     }
-    /*
     while (client->dir_steps > 0) {
         send_dir_above(client);
         client->dir_steps--;
     }
-     */
-    client->dir_steps = 0;
 
     send_dir_above(client);
     send_list_done(client);
