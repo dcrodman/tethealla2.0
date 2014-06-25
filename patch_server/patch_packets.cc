@@ -164,11 +164,12 @@ bool send_welcome_message(patch_client *client, packet_hdr *header,
 /* Acknowledgement sent by the DATA portion after receiving the login packet
  and before sending patch data. */
 bool send_data_ack(patch_client* client) {
+    printf("Send Data ACK\n");
     return send_header(client, DATA_WELCOME_ACK);
 }
 
 /* Tell the clinet to change directories to the one specified by dir. */
-bool send_change_directory(patch_client* client, char* dir) {
+bool send_change_directory(patch_client* client, const char* dir) {
     change_dir_packet *pkt = (change_dir_packet*) client->send_buffer;
     memset(&client->send_buffer, 0, sizeof(client->send_buffer));
 

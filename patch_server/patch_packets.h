@@ -172,7 +172,7 @@ bool send_welcome_message(patch_client *client, packet_hdr *header,
 bool send_redirect(patch_client* client, uint32_t serverIP, uint16_t serverPort);
 
 bool send_data_ack(patch_client* client);
-bool send_change_directory(patch_client* client, char* dir);
+bool send_change_directory(patch_client* client, const char* dir);
 bool send_dir_above(patch_client* client);
 bool send_check_file(patch_client* client, uint32_t index, char *filename);
 bool send_list_done(patch_client* client);
