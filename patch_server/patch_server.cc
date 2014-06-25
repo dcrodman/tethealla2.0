@@ -148,8 +148,9 @@ int sending_client_file(patch_client *client) {
     }
 
     // Send the next chunk of the file.
-    // TODO: handle this upon erroring out
-    int sent = send_file(client, patch);
+    int sent;
+    if ((sent = send_file(client, patch)) == -1)
+        return -1;
     client->cur_chunk++;
     client->patch_sent += sent;
 
@@ -167,6 +168,8 @@ int sending_client_file(patch_client *client) {
     return 1;
 }
 
+/* Figure out whether we need to send any files to the client. If so, build up the
+file info packet, send it out, and start the process of sending files. */
 int handle_client_list_done(patch_client *client) {
     uint32_t num_files = 0, size = 0;
     std::list<patch_file*>::const_iterator patch, end;
@@ -436,6 +439,7 @@ void handle_connections(int patchfd, int datafd) {
                     printf("Checking client %s\n", (*c)->ip_addr_str);
                 if (FD_ISSET((*c)->socket, &readfds)) {
                     if (receive_from_client((*c)) == 1) {
+                    remove_client:
                         close((*c)->socket);
                         destory_client(*c);
                         connections.erase(c++);
@@ -443,8 +447,11 @@ void handle_connections(int patchfd, int datafd) {
                     }
                 }
                 // Are we sending the client files?
-                if (FD_ISSET((*c)->socket, &writefds))
-                    sending_client_file(*c);
+                if (FD_ISSET((*c)->socket, &writefds)) {
+                    if (sending_client_file(*c) == -1)
+                        // I know, I shouldn't use a GOTO.
+                        goto remove_client;
+                }
                 if (FD_ISSET((*c)->socket, &exceptfds)) {
                     if (DEBUGGING)
                         printf("Exception on socket %d\n", (*c)->socket);
