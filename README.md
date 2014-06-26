@@ -36,4 +36,5 @@ figure out what configuration they need.
 Note that if you're using Xcode (or another IDE) as the generator to edit or build the 
 project, you may need to explicitly edit your linker's library and include paths. These 
 will likely be /usr/local/lib and /usr/local/include respectively if on *nix and you 
-installed the libraries to your system.
+installed the libraries to your system. Xcode in particular requires that you add a 
+"Link Binary With Libraries" step for the libraries listed above.
