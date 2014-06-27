@@ -15,7 +15,7 @@ add_executable(login_server
     clientmsg.h
     pso_crypt.h
     servermsg.h
-    login_server.c
+    login_server.cc
     )
 
 # Allow patch_server to be built by itself by including the exported
