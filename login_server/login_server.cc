@@ -82,7 +82,7 @@ const char *PSO_CLIENT_VER_STRING = "TethVer12510";
 #define CLASS_RAMARL 0x0B
 #define CLASS_MAX 0x0C
 
-struct timeval select_timeout = { 
+timeval select_timeout = {
 	0, 
 	5000
 };
@@ -654,20 +654,18 @@ unsigned lastdump = 0;
 
 #define MYWM_NOTIFYICON (WM_USER+2)
 int program_hidden = 1;
-HWND consoleHwnd;
-HWND backupHwnd;
 
 void WriteLog(char *fmt, ...)
 {
 #define MAX_GM_MESG_LEN 4096
 
 	va_list args;
-	char text[ MAX_GM_MESG_LEN ];
-	SYSTEMTIME rawtime;
-
+	char text[ MAX_GM_MESG_LEN], *ptime;
+	time_t rawtime;
 	FILE *fp;
 
-	GetLocalTime (&rawtime);
+    time(&rawtime);
+    ptime = ctime(&rawtime);
 	va_start (args, fmt);
 	strcpy (text + vsprintf( text,fmt,args), "\r\n"); 
 	va_end (args);
@@ -678,15 +676,13 @@ void WriteLog(char *fmt, ...)
 		printf ("Unable to log to login.log\n");
 	}
 
-	fprintf (fp, "[%02u-%02u-%u, %02u:%02u] %s", rawtime.wMonth, rawtime.wDay, rawtime.wYear, 
-		rawtime.wHour, rawtime.wMinute, text);
+	fprintf (fp, "[%s] %s", ptime, text);
 	fclose (fp);
 
-	printf ("[%02u-%02u-%u, %02u:%02u] %s", rawtime.wMonth, rawtime.wDay, rawtime.wYear, 
-		rawtime.wHour, rawtime.wMinute, text);
+	printf ("[%s] %s", ptime, text);
 }
 
-
+/*
 void display_packet ( unsigned char* buf, int len )
 {
 	int c, c2, c3, c4;
@@ -737,15 +733,13 @@ void display_packet ( unsigned char* buf, int len )
 	dp[c2] = 0;
 	printf ("%s\n\n", &dp[0]);
 }
+ */
 
 /* Computes the message digest for string inString.
    Prints out message digest, a space, the string (in quotes) and a
    carriage return.
  */
-void MDString (inString, outString)
-char *inString;
-char *outString;
-{
+void MDString (char *inString, char *outString) {
   unsigned char c;
   MD5_CTX mdContext;
   unsigned int len = strlen (inString);
