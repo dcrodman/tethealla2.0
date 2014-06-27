@@ -8,3 +8,4 @@ include_directories(${CMAKE_SOURCE_DIR}/libtethealla/include)
 # building each individual project.
 add_subdirectory(libtethealla)
 add_subdirectory(patch_server)
+add_subdirectory(login_server)
