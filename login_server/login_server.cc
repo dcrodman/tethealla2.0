@@ -24,19 +24,19 @@
 #define NO_SQL
 #define NO_CONNECT_TEST
 
-#include	<stdio.h>
-#include	<string.h>
-#include	<time.h>
+#include <cstdlib>
+#include <cstdio>
+#include <cstring>
+#include <sys/time.h>
+#include <cstdarg>
 
 #ifndef NO_SQL
-#include	<mysql.h>
+#include <mysql.h>
 #endif
-#include	<md5.h>
+#include <md5.h>
 
-#include	"resource.h"
 #include	"pso_crypt.h"
 #include	"bbtable.h"
-#include	"prs.cpp"
 
 #define MAX_SIMULTANEOUS_CONNECTIONS 6
 #define LOGIN_COMPILED_MAX_CONNECTIONS 300
