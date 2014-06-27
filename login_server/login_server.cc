@@ -682,59 +682,6 @@ void WriteLog(char *fmt, ...)
 	printf ("[%s] %s", ptime, text);
 }
 
-/*
-void display_packet ( unsigned char* buf, int len )
-{
-	int c, c2, c3, c4;
-
-	c = c2 = c3 = c4 = 0;
-
-	for (c=0;c<len;c++)
-	{
-		if (c3==16)
-		{
-			for (;c4<c;c4++)
-				if (buf[c4] >= 0x20) 
-					dp[c2++] = buf[c4];
-				else
-					dp[c2++] = 0x2E;
-			c3 = 0;
-			sprintf (&dp[c2++], "\n" );
-		}
-
-		if ((c == 0) || !(c % 16))
-		{
-			sprintf (&dp[c2], "(%04X) ", c);
-			c2 += 7;
-		}
-
-		sprintf (&dp[c2], "%02X ", buf[c]);
-		c2 += 3;
-		c3++;
-	}
-
-	if ( len % 16 )
-	{
-		c3 = len;
-		while (c3 % 16)
-		{
-			sprintf (&dp[c2], "   ");
-			c2 += 3;
-			c3++;
-		}
-	}
-
-	for (;c4<c;c4++)
-		if (buf[c4] >= 0x20) 
-			dp[c2++] = buf[c4];
-		else
-			dp[c2++] = 0x2E;
-
-	dp[c2] = 0;
-	printf ("%s\n\n", &dp[0]);
-}
- */
-
 /* Computes the message digest for string inString.
    Prints out message digest, a space, the string (in quotes) and a
    carriage return.
@@ -5902,7 +5849,7 @@ main( int argc, char * argv[] )
 		if ( backupHwnd != hwndWindow )
 		{
 			debug ("hwndWindow has been corrupted...");
-			display_packet ( (unsigned char*) &hwndWindow, sizeof (HWND));
+			//display_packet ( (unsigned char*) &hwndWindow, sizeof (HWND));
 			hwndWindow = backupHwnd;
 			WriteLog ("hwndWindow corrupted %s", (char*) &dp[0] );
 		}
