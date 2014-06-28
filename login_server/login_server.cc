@@ -5273,39 +5273,6 @@ void LoadDataFile ( const char* filename, unsigned* count, void** data, unsigned
 
 #endif
 
-
-LRESULT CALLBACK WndProc( HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam )
-{
-	if(message == MYWM_NOTIFYICON)
-	{
-		switch (lParam)
-		{
-		case WM_LBUTTONDBLCLK:
-			switch (wParam) 
-			{
-			case 100:
-				if (program_hidden)
-				{
-					program_hidden = 0;
-					ShowWindow (consoleHwnd, SW_NORMAL);
-					SetForegroundWindow (consoleHwnd);
-					SetFocus(consoleHwnd);
-				}
-				else
-				{
-					program_hidden = 1;
-					ShowWindow (consoleHwnd, SW_HIDE);
-				}
-				return TRUE;
-				break;
-			}
-			break;
-		}
-	}
-	return DefWindowProc( hwnd, message, wParam, lParam );
-}
-
-
 /********************************************************
 **
 **		main  :-
@@ -5328,24 +5295,10 @@ int main( int argc, char * argv[] ) {
 	//int wserror;
 	unsigned char MDBuffer[17] = {0};
 	unsigned connectNum, shipNum;
-	HINSTANCE hinst;
-    NOTIFYICONDATA nid = {0};
-	WNDCLASS wc = {0};
-	HWND hwndWindow;
-	MSG msg;
-	WSADATA winsock_data;
-
-	consoleHwnd = GetConsoleWindow();
-	hinst = GetModuleHandle(NULL);
 
 	dp[0] = 0;
 
 	memset (&dp[0], 0, sizeof (dp));
-
-	strcat (&dp[0], "Tethealla Login Server version ");
-	strcat (&dp[0], SERVER_VERSION );
-	strcat (&dp[0], " coded by Sodaboy");
-	SetConsoleTitle (&dp[0]);
 
 	printf ("\nTethealla Login Server version %s  Copyright (C) 2008  Terry Chatman Jr.\n", SERVER_VERSION);
 	printf ("-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-\n");
@@ -5446,10 +5399,10 @@ int main( int argc, char * argv[] ) {
 	printf ("Character Port: %u\n", serverPort+1 );
 	printf ("Maximum Connections: %u\n", serverMaxConnections );
 	printf ("Maximum Ships: %u\n\n", serverMaxShips );
-	printf ("Allocating %u bytes of memory for connections...", sizeof (BANANA) * serverMaxConnections );
+	printf ("Allocating %lu bytes of memory for connections...", sizeof (BANANA) * serverMaxConnections );
 	for (ch=0;ch<serverMaxConnections;ch++)
 	{
-		connections[ch] = malloc ( sizeof (BANANA) );
+		connections[ch] = (st_banana*) malloc ( sizeof (BANANA) );
 		if ( !connections[ch] )
 		{
 			printf ("Out of memory!\n");
@@ -5460,11 +5413,11 @@ int main( int argc, char * argv[] ) {
 		initialize_connection (connections[ch]);
 	}
 	printf (" OK!\n");
-	printf ("Allocating %u bytes of memory for ships...", sizeof (ORANGE) * serverMaxShips );
+	printf ("Allocating %lu bytes of memory for ships...", sizeof (ORANGE) * serverMaxShips );
 	memset (&ships, 0, 4 * serverMaxShips);
 	for (ch=0;ch<serverMaxShips;ch++)
 	{
-		ships[ch] = malloc ( sizeof (ORANGE) );
+		ships[ch] = (st_orange*) malloc ( sizeof (ORANGE) );
 		if ( !ships[ch] )
 		{
 			printf ("Out of memory!\n");
@@ -5627,58 +5580,6 @@ int main( int argc, char * argv[] ) {
 	}
 
 	printf ("\nListening...\n");
-
-	wc.hbrBackground =(HBRUSH)GetStockObject(WHITE_BRUSH);
-	wc.hIcon = LoadIcon( hinst, IDI_APPLICATION );
-	wc.hCursor = LoadCursor( hinst, IDC_ARROW );
-	wc.hInstance = hinst;
-	wc.lpfnWndProc = WndProc;
-	wc.lpszClassName = "sodaboy";
-	wc.style = CS_HREDRAW | CS_VREDRAW;
-
-	if (! RegisterClass( &wc ) )
-	{
-		printf ("RegisterClass failure.\n");
-		exit (1);
-	}
-
-	hwndWindow = CreateWindow ("sodaboy","hidden window", WS_MINIMIZE, 1, 1, 1, 1, 
-		NULL, 
-		NULL,
-		hinst,
-		NULL );
-
-	backupHwnd = hwndWindow;
-
-	if (!hwndWindow)
-	{
-		printf ("Failed to create window.");
-		exit (1);
-	}
-
-	ShowWindow ( hwndWindow, SW_HIDE );
-	UpdateWindow ( hwndWindow );
-	ShowWindow ( consoleHwnd, SW_HIDE );
-	UpdateWindow ( consoleHwnd );
-
-    nid.cbSize				= sizeof(nid);
-	nid.hWnd				= hwndWindow;
-	nid.uID					= 100;
-	nid.uCallbackMessage	= MYWM_NOTIFYICON;
-	nid.uFlags				= NIF_MESSAGE|NIF_ICON|NIF_TIP;
-    nid.hIcon				= LoadIcon(hinst, MAKEINTRESOURCE(IDI_ICON1));
-	nid.szTip[0] = 0;
-	strcat (&nid.szTip[0], "Tethealla Login ");
-	strcat (&nid.szTip[0], SERVER_VERSION);
-	strcat (&nid.szTip[0], " - Double click to show/hide");
-    Shell_NotifyIcon(NIM_ADD, &nid);
-
-
-#ifdef NO_SQL
-
-	lastdump = (unsigned) time(NULL);
-
-#endif
 
 	for (;;)
 	{
@@ -6277,11 +6178,11 @@ int tcp_sock_open(struct in_addr ip, int port)
 * same as debug_perror but writes to debug output.
 * 
 *****************************************************************************/
-void debug_perror( char * msg ) {
+void debug_perror(const char * msg ) {
 	debug( "%s : %s\n" , msg , strerror(errno) );
 }
 /*****************************************************************************/
-void debug(char *fmt, ...)
+void debug(const char *fmt, ...)
 {
 #define MAX_MESG_LEN 1024
 
