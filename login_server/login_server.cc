@@ -1176,17 +1176,22 @@ void start_encryption(BANANA* connect)
 	connect->connected = (unsigned) servertime;
 }
 
-void SendB1 (BANANA* client)
-{
-	SYSTEMTIME rawtime;
+void SendB1 (BANANA* client) {
+    /* From Sylverant; generate the timestamp for this packet. */
+	struct timeval rawtime;
+    struct tm cooked;
 
 	if ((client->guildcard) && (client->slotnum != -1))
 	{
-		GetSystemTime (&rawtime);
 		*(long long*) &client->encryptbuf[0] = *(long long*) &PacketB1[0];
 		memset (&client->encryptbuf[0x08], 0, 28);
-		sprintf (&client->encryptbuf[8], "%u:%02u:%02u: %02u:%02u:%02u.%03u", rawtime.wYear, rawtime.wMonth, rawtime.wDay,
-			rawtime.wHour, rawtime.wMinute, rawtime.wSecond, rawtime.wMilliseconds );
+
+		gettimeofday(&rawtime, NULL);
+        localtime_r(&rawtime.tv_sec, &cooked);
+        sprintf((char*)&client->encryptbuf[8], "%u:%02u:%02u: %02u:%02u:%02u.%03u", cooked.tm_year + 1900,
+                cooked.tm_mon + 1, cooked.tm_mday, cooked.tm_hour, cooked.tm_min,
+                cooked.tm_sec, rawtime.tv_usec / 1000);
+
 		cipher_ptr = &client->server_cipher;
 		encryptcopy (client, &client->encryptbuf[0], 0x24 );
 	}
@@ -5349,22 +5354,15 @@ main( int argc, char * argv[] )
 	printf ("see section 15 in gpl-3.0.txt\n");
     printf ("This is free software, and you are welcome to redistribute it\n");
     printf ("under certain conditions; see gpl-3.0.txt for details.\n");
-/*
-	for (ch=0;ch<5;ch++)
-	{
-		printf (".");
-		Sleep (1000);
-	}*/
-	printf ("\n\n");
 
-	WSAStartup(MAKEWORD(1,1), &winsock_data);
+	printf ("\n\n");
 
 	srand ( (unsigned) time(NULL) );
 
 	memset ( &dress_flags[0], 0, sizeof (DRESSFLAG) * MAX_DRESS_FLAGS);
 
-	printf ("Loading configuration from tethealla.ini ...");
-	load_config_file();
+	printf ("Loading configuration from %s...", CFG_NAME);
+	load_config();
 	printf ("  OK!\n");
 
 	/* Set this up for later. */
