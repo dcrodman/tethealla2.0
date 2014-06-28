@@ -27,8 +27,18 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
-#include <sys/time.h>
 #include <cstdarg>
+
+#include <sys/time.h>
+#include <arpa/inet.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <unistd.h>
+
+extern "C" {
+    #include <jansson.h>
+}
 
 #ifndef NO_SQL
 #include <mysql.h>
@@ -81,6 +91,9 @@ const char *PSO_CLIENT_VER_STRING = "TethVer12510";
 #define CLASS_FOMAR 0x0A
 #define CLASS_RAMARL 0x0B
 #define CLASS_MAX 0x0C
+
+const char *CFG_NAME = "login_config.json";
+const char *LOCAL_DIR = "/usr/local/share/tethealla/config/";
 
 timeval select_timeout = {
 	0, 
@@ -195,9 +208,6 @@ const unsigned char PacketEE[] = {
 unsigned char E2_Base[2808] = { 0 };
 unsigned char PacketE2Data[2808] = { 0 };
 
-/* String sent to server to retrieve IP address. */
-
-char* HTTP_REQ = "GET http://www.pioneer2.net/remote.php HTTP/1.0\r\n\r\n\r\n";
 
 /* Populated by load_config_file(): */
 
@@ -873,236 +883,71 @@ unsigned char hexToByte ( char* hs )
 	return (unsigned char) b;
 }
 
-void load_config_file()
-{
-	int config_index = 0;
-	char config_data[255];
-	unsigned ch;
+/* Writes the contents of a JSON error to stdout.*/
+void json_error(json_error_t* error) {
+    printf("Error: %s\n", error->text);
+    printf("Source: %s\n", error->source);
+    printf("Line: %d, Column: %d\n", error->line, error->column);
+}
 
-	FILE* fp;
+int load_config() {
+    json_error_t error;
+    json_t *cfg_file = json_load_file(CFG_NAME, JSON_DECODE_ANY, &error);
 
-	if ( ( fp = fopen ("tethealla.ini", "r" ) ) == NULL )
-	{
-		printf ("The configuration file tethealla.ini appears to be missing.\n");
-		printf ("Hit [ENTER]");
-		//gets (&dp[0]);
-		exit (1);
-	}
-	else
-		while (fgets (&config_data[0], 255, fp) != NULL)
-		{
-			if (config_data[0] != 0x23)
-			{
-				if ((config_index < 0x04) || (config_index > 0x04))
-				{
-					ch = strlen (&config_data[0]);
-					if (config_data[ch-1] == 0x0A)
-						config_data[ch--]  = 0x00;
-					config_data[ch] = 0;
-				}
-				switch (config_index)
-				{
-				case 0x00:
-					// MySQL Host
-					memcpy (&mySQL_Host[0], &config_data[0], ch+1);
-					break;
-				case 0x01:
-					// MySQL Username
-					memcpy (&mySQL_Username[0], &config_data[0], ch+1);
-					break;
-				case 0x02:
-					// MySQL Password
-					memcpy (&mySQL_Password[0], &config_data[0], ch+1);
-					break;
-				case 0x03:
-					// MySQL Database
-					memcpy (&mySQL_Database[0], &config_data[0], ch+1);
-					break;
-				case 0x04:
-					// MySQL Port
-					mySQL_Port = atoi (&config_data[0]);
-					break;
-				case 0x05:
-					// Server IP address
-					{
-						if ((config_data[0] == 0x41) || (config_data[0] == 0x61))
-						{
-							struct sockaddr_in pn_in;
-							struct hostent *pn_host;
-							int pn_sockfd, pn_len;
-							char pn_buf[512];
-							char* pn_ipdata;
+    if (!cfg_file) {
+        // Look in LOCAL_DIR in case the files were placed there instead.
+        char config_dir[128];
+        strncat(config_dir, LOCAL_DIR, strlen(LOCAL_DIR));
+        strncat(config_dir, CFG_NAME, strlen(CFG_NAME));
 
-							printf ("\n** Determining IP address ... ");
+        printf("Failed.\nLoading config file in %s...", config_dir);
+        cfg_file = json_load_file(config_dir, JSON_DECODE_ANY, &error);
 
-							pn_host = gethostbyname ( "www.pioneer2.net" );
-							if (!pn_host) {
-								printf ("Could not resolve www.pioneer2.net\n");
-								printf ("Hit [ENTER]");
-								//gets (&dp[0]);
-								exit (1);
-							}
+        if (!cfg_file) {
+            printf("Failed to load configuration file.\n");
+            json_error(&error);
+            return -1;
+        }
+    }
+    char *global_color, *local_color, *normal_color;
 
-							/* Create a reliable, stream socket using TCP */
-							if ((pn_sockfd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0)
-							{
-								printf ("Unable to create TCP/IP streaming socket.");
-								printf ("Hit [ENTER]");
-								//gets (&dp[0]);
-								exit(1);
-							}
+    int result = json_unpack_ex(cfg_file, &error, JSON_STRICT,
+            "{s:{s:s, s:s, s:s, s:i, s:s}, s:s, s:i, s:s, s:i, s:i, "
+            "s:{s:i, s:i, s:i, s:i, s:i, s:i, s:i, s:i}, s:s, s:s, s:s}",
+            "mysql",
+            "username", &mySQL_Username[0],
+            "password", &mySQL_Password[0],
+            "host", &mySQL_Host[0],
+            "port", &mySQL_Port,
+            "database", &mySQL_Database[0],
+            "server_ip", &serverIP,
+            "server_port", &serverPort,
+            "welcome_message", &Welcome_Message[0],
+            "max_client_connections", &serverMaxConnections,
+            "max_ship_connections" , &serverMaxShips,
+            "rare_appearance_rates",
+            "hildebear", &mob_rate[0],
+            "rappy", &mob_rate[1],
+            "lilly", &mob_rate[2],
+            "slime", &mob_rate[3],
+            "merissa", &mob_rate[4],
+            "panzuzu", &mob_rate[5],
+            "dorphon_eclair", &mob_rate[6],
+            "kondrieu", &mob_rate[7],
+            "global_gm_color", &global_color,
+            "local_gm_color", &local_color,
+            "normal_color", &normal_color
+    );
 
-							/* Construct the server address structure */
-							memset(&pn_in, 0, sizeof(pn_in)); /* Zero out structure */
-							pn_in.sin_family = AF_INET; /* Internet address family */
+    globalName = atoi(global_color);
+    localName = atoi(global_color);
+    normalName = atoi(normal_color);
 
-							*(unsigned*) &pn_in.sin_addr.s_addr = *(unsigned *) pn_host->h_addr; /* Web Server IP address */
-
-							pn_in.sin_port = htons(80); /* Web Server port */
-
-							/* Establish the connection to the pioneer2.net Web Server ... */
-
-							if (connect(pn_sockfd, (struct sockaddr *) &pn_in, sizeof(pn_in)) < 0)
-							{
-								printf ("\nCannot connect to www.pioneer2.net!");
-								printf ("Hit [ENTER]");
-								//gets (&dp[0]);
-								exit(1);
-							}
-
-							/* Process pioneer2.net's response into the serverIP variable. */
-
-							send_to_server ( pn_sockfd, HTTP_REQ );
-							pn_len = recv(pn_sockfd, &pn_buf[0], sizeof(pn_buf) - 1, 0);
-							close (pn_sockfd);
-							pn_buf[pn_len] = 0;
-							pn_ipdata = strstr (&pn_buf[0], "/html");
-							if (!pn_ipdata)
-							{
-								printf ("Failed to determine IP address.\n");
-							}
-							else
-								pn_ipdata += 9;
-
-							convertIPString (pn_ipdata, strlen (pn_ipdata), 0 );
-						}
-						else
-						{
-							convertIPString (&config_data[0], ch+1, 1);
-						}
-					}
-					break;
-				case 0x06:
-					// Welcome Message
-					memcpy (&Welcome_Message[0], &config_data[0], ch+1 );
-					break;
-				case 0x07:
-					// Server Listen Port
-					serverPort = atoi (&config_data[0]);
-					break;
-				case 0x08:
-					// Max Client Connections
-					serverMaxConnections = atoi (&config_data[0]);
-					if ( serverMaxConnections > LOGIN_COMPILED_MAX_CONNECTIONS )
-					{
-						serverMaxConnections = LOGIN_COMPILED_MAX_CONNECTIONS;
-						printf ("This version of the login server has not been compiled to handle more than %u login connections.  Adjusted.\n", LOGIN_COMPILED_MAX_CONNECTIONS );
-					}
-					if (!serverMaxConnections)
-						serverMaxConnections = LOGIN_COMPILED_MAX_CONNECTIONS;
-					break;
-				case 0x09:
-					// Max Ship Connections
-					serverMaxShips = atoi (&config_data[0]);
-					if ( serverMaxShips > SHIP_COMPILED_MAX_CONNECTIONS )
-					{
-						serverMaxShips = SHIP_COMPILED_MAX_CONNECTIONS;
-						printf ("This version of the login server has not been compiled to handle more than %u ship connections.  Adjusted.\n", SHIP_COMPILED_MAX_CONNECTIONS );
-					}
-					if (!serverMaxShips)
-						serverMaxShips = SHIP_COMPILED_MAX_CONNECTIONS;
-					break;
-				case 0x0A:
-					// Override IP address (if specified, this IP will be sent out instead of your own to those who connect)
-					if ((config_data[0] > 0x30) && (config_data[0] < 0x3A))
-					{
-						override_on = 1;
-						*(unsigned *) &overrideIP[0] = *(unsigned *) &serverIP[0];
-						serverIP[0] = 0;
-						convertIPString (&config_data[0], ch+1, 1);							
-					}
-					break;
-				case 0x0B:
-					// Hildebear rate
-					mob_rate[0] = atoi ( &config_data[0] );
-					break;
-				case 0x0C:
-					// Rappy rate
-					mob_rate[1] = atoi ( &config_data[0] );
-					break;
-				case 0x0D:
-					// Lily rate
-					mob_rate[2] = atoi ( &config_data[0] );
-					break;
-				case 0x0E:
-					// Slime rate
-					mob_rate[3] = atoi ( &config_data[0] );
-					break;
-				case 0x0F:
-					// Merissa rate
-					mob_rate[4] = atoi ( &config_data[0] );
-					break;
-				case 0x10:
-					// Pazuzu rate
-					mob_rate[5] = atoi ( &config_data[0] );
-					break;
-				case 0x11:
-					// Dorphon Eclair rate
-					mob_rate[6] = atoi ( &config_data[0] );
-					break;
-				case 0x12:
-					// Kondrieu rate
-					mob_rate[7] = atoi ( &config_data[0] );
-					break;
-				case 0x13:
-					// Global GM name color
-					(unsigned char) config_data[6] = hexToByte (&config_data[4]);
-					(unsigned char) config_data[7] = hexToByte (&config_data[2]);
-					(unsigned char) config_data[8] = hexToByte (&config_data[0]);
-					config_data[9]  = 0xFF;
-					globalName = *(unsigned *) &config_data[6];
-					break;
-				case 0x14:
-					// Local GM name color
-					(unsigned char) config_data[6] = hexToByte (&config_data[4]);
-					(unsigned char) config_data[7] = hexToByte (&config_data[2]);
-					(unsigned char) config_data[8] = hexToByte (&config_data[0]);
-					config_data[9]  = 0xFF;
-					localName = *(unsigned *) &config_data[6];
-					break;
-				case 0x15:
-					// Normal name color
-					(unsigned char) config_data[6] = hexToByte (&config_data[4]);
-					(unsigned char) config_data[7] = hexToByte (&config_data[2]);
-					(unsigned char) config_data[8] = hexToByte (&config_data[0]);
-					config_data[9]  = 0xFF;
-					normalName = *(unsigned *) &config_data[6];
-					break;
-				default:
-					break;
-				}
-				config_index++;
-			}
-		}
-		fclose (fp);
-
-	if (config_index < 0x13)
-	{
-		printf ("tethealla.ini seems to be corrupted.\n");
-		printf ("Hit [ENTER]");
-		gets (&dp[0]);
-		exit (1);
-	}
+    if (result == -1) {
+        json_error(&error);
+        return -1;
+    }
+    return 0;
 }
 
 BANANA * connections[LOGIN_COMPILED_MAX_CONNECTIONS];
