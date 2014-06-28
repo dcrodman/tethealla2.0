@@ -49,8 +49,10 @@ extern "C" {
 #include	"bbtable.h"
 
 #define MAX_SIMULTANEOUS_CONNECTIONS 6
+// TODO: Use these
 #define LOGIN_COMPILED_MAX_CONNECTIONS 300
 #define SHIP_COMPILED_MAX_CONNECTIONS 50
+
 #define MAX_EB02 800000
 #define SERVER_VERSION "0.048"
 #define MAX_ACCOUNTS 2000
@@ -702,7 +704,7 @@ void MDString (char *inString, char *outString) {
   unsigned int len = strlen (inString);
 
   MD5Init (&mdContext);
-  MD5Update (&mdContext, inString, len);
+  MD5Update (&mdContext, (unsigned char*)inString, len);
   MD5Final (&mdContext);
   for (c=0;c<16;c++)
   {
@@ -991,7 +993,7 @@ void construct0xA0()
 				PacketA0Data[A0Offset] = 0x12;
 				*(unsigned *) &PacketA0Data[A0Offset+2] = shipcheck->shipID;
 				ch2 = A0Offset+0x08;
-				shipName = &shipcheck->name[0];
+				shipName = (char*)&shipcheck->name[0];
 				while (*shipName != 0x00)
 				{
 					PacketA0Data[ch2++] = *shipName;
@@ -1002,8 +1004,8 @@ void construct0xA0()
 				PacketA0Data[ch2++] = 0x00;
 				PacketA0Data[ch2++] = 0x28;
 				PacketA0Data[ch2++] = 0x00;
-				_itoa (shipcheck->playerCount, &playerCountString[0], 10);
-				shipName = &playerCountString[0];
+				itoa (shipcheck->playerCount, &playerCountString[0], 10);
+				shipName = (char*)&playerCountString[0];
 				while (*shipName != 0x00)
 				{
 					PacketA0Data[ch2++] = *shipName;
@@ -1126,7 +1128,7 @@ void start_encryption(BANANA* connect)
 		connectNum = serverConnectionList[c];
 		workConnect = connections[connectNum];
 		//debug ("%s comparing to %s", (char*) &workConnect->IP_Address[0], (char*) &connect->IP_Address[0]);
-		if ((!strcmp(&workConnect->IP_Address[0], &connect->IP_Address[0])) &&
+		if ((!strcmp((const char*)&workConnect->IP_Address[0], (const char*)&connect->IP_Address[0])) &&
 			(workConnect->plySockfd >= 0))
 			c3++;
 	}
@@ -1141,7 +1143,7 @@ void start_encryption(BANANA* connect)
 		{
 			connectNum = serverConnectionList[c];
 			workConnect = connections[connectNum];
-			if ((!strcmp(&workConnect->IP_Address[0], &connect->IP_Address[0])) &&
+			if ((!strcmp((const char*) &workConnect->IP_Address[0], (const char*) &connect->IP_Address[0])) &&
 				(workConnect->plySockfd >= 0))
 			{
 				if (workConnect->connected < c4)
@@ -1212,7 +1214,7 @@ void Send1A (const char *mes, BANANA* client)
 		Packet1AData[x1A_Len++] = 0x00;
 	*(unsigned short*) &Packet1AData[0] = x1A_Len;
 	cipher_ptr = &client->server_cipher;
-	encryptcopy (client, &Packet1AData[0], x1A_Len);
+	encryptcopy (client, (const unsigned char*)&Packet1AData[0], x1A_Len);
 	client->todc = 1;
 }
 
@@ -1250,7 +1252,7 @@ void SendEE (const char *mes, BANANA* client)
 			PacketEEData[xEE_Len++] = 0x00;
 		*(unsigned short*) &PacketEEData[0] = xEE_Len;
 		cipher_ptr = &client->server_cipher;
-		encryptcopy (client, &PacketEEData[0], xEE_Len);
+		encryptcopy (client, (const unsigned char*)&PacketEEData[0], xEE_Len);
 	}
 }
 
@@ -1291,7 +1293,7 @@ void SendE2 (BANANA* client)
 			memcpy (&PacketE2Data[0x11C], &key_data[ds_found]->controls, 420 );
 		else
 		{
-			key_data[num_keydata] = malloc (sizeof(L_KEY_DATA));
+			key_data[num_keydata] = (st_key_data*) malloc (sizeof(L_KEY_DATA));
 			key_data[num_keydata]->guildcard = client->guildcard;
 			memcpy (&key_data[num_keydata]->controls, &E2_Base[0x11C], 420);
 			UpdateDataFile ("keydata.dat", num_keydata, key_data[num_keydata], sizeof(L_KEY_DATA), 1);
@@ -1684,7 +1686,7 @@ void AckCharacter_Creation(unsigned char slotnum, BANANA* client)
 				{
 					ds_found = num_characters;
 					new_record = 1;
-					character_data[num_characters++] = malloc (sizeof(L_CHARACTER_DATA));
+					character_data[num_characters++] = (st_character*) malloc (sizeof(L_CHARACTER_DATA));
 				}
 			}
 			else
@@ -2742,7 +2744,7 @@ void ShipProcessPacket (ORANGE* ship)
 					{
 						// Common bank needs to be created.
 
-						bank_data[num_bankdata] = malloc (sizeof(L_BANK_DATA));
+						bank_data[num_bankdata] = (st_bank_file*) malloc (sizeof(L_BANK_DATA));
 						bank_data[num_bankdata]->guildcard = guildcard;
 						memcpy (&bank_data[num_bankdata]->common_bank, &empty_bank, sizeof (BANK));
 						memcpy (&ship->encryptbuf[0x0C+sizeof(CHARDATA)], &empty_bank, sizeof(BANK));
@@ -3142,7 +3144,7 @@ void ShipProcessPacket (ORANGE* ship)
 						{
 							new_record = 1;
 							ds_found = num_guilds;
-							guild_data[num_guilds++] = malloc ( sizeof (L_GUILD_DATA) );
+							guild_data[num_guilds++] = (st_guild*) malloc ( sizeof (L_GUILD_DATA) );
 						}
 					}
 
@@ -3701,7 +3703,7 @@ void ShipProcessPacket (ORANGE* ship)
 						{
 							new_record = 1;
 							ds_found = num_teams;
-							team_data[num_teams++] = malloc ( sizeof (L_TEAM_DATA) );
+							team_data[num_teams++] = (st_team_data*) malloc ( sizeof (L_TEAM_DATA) );
 						}
 						memcpy (&team_data[ds_found]->name[0], &ship->decryptbuf[0x06], 24);
 						memcpy (&team_data[ds_found]->flag, &DefaultTeamFlag, 2048);
@@ -4563,7 +4565,7 @@ void CharacterProcessPacket (BANANA* client)
 				memcpy (&client->encryptbuf[0], &PacketE6[0], sizeof (PacketE6));
 				*(unsigned *) &client->encryptbuf[0x10] = gcn;
 				client->guildcard = gcn;
-				_itoa (gcn, &client->guildcard_string[0], 10); /* auth'd, bitch */
+				itoa (gcn, &client->guildcard_string[0], 10); /* auth'd, bitch */
 				// Store some security shit in the E6 packet.
 				*(long long*) &client->encryptbuf[0x38] = security_sixtyfour_check;
 				if (security_thirtytwo_check == 0)
@@ -4928,7 +4930,7 @@ void LoginProcessPacket (BANANA* client)
 				if (new_record)
 				{
 					free_record = num_security++;
-					security_data[free_record] = malloc ( sizeof (L_SECURITY_DATA) );
+					security_data[free_record] = (st_security_data*) malloc ( sizeof (L_SECURITY_DATA) );
 				}
 				security_data[free_record]->guildcard = gcn;
 				security_data[free_record]->thirtytwo = 0;
@@ -5085,10 +5087,10 @@ void LoadDropData()
 						strcat (&id_file[0], "drop\\ep4_mob_");
 						break;
 					}
-					_itoa (d, &convert_ch[0], 10);
+					itoa (d, &convert_ch[0], 10);
 					strcat (&id_file[0], &convert_ch[0]);
 					strcat (&id_file[0], "_");
-					_itoa (ch2, &convert_ch[0], 10);
+					itoa (ch2, &convert_ch[0], 10);
 					strcat (&id_file[0], &convert_ch[0]);
 					strcat (&id_file[0], ".txt");
 					ch3 = 0;
