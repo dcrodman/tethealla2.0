@@ -28,6 +28,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdarg>
+#include <cctype>
 
 #include <sys/time.h>
 #include <arpa/inet.h>
@@ -518,7 +519,7 @@ typedef struct st_orange {
 fd_set ReadFDs, WriteFDs, ExceptFDs;
 
 DRESSFLAG dress_flags[MAX_DRESS_FLAGS];
-unsigned char dp[TCP_BUFFER_SIZE*4];
+char dp[TCP_BUFFER_SIZE*4];
 unsigned char tmprcv[PACKET_BUFFER_SIZE];
 char Packet1AData[TCP_BUFFER_SIZE];
 char PacketEEData[TCP_BUFFER_SIZE];
@@ -1004,7 +1005,7 @@ void construct0xA0()
 				PacketA0Data[ch2++] = 0x00;
 				PacketA0Data[ch2++] = 0x28;
 				PacketA0Data[ch2++] = 0x00;
-				itoa (shipcheck->playerCount, &playerCountString[0], 10);
+                sprintf((char*)&playerCountString[0], "%d", shipcheck->playerCount);
 				shipName = (char*)&playerCountString[0];
 				while (*shipName != 0x00)
 				{
@@ -4079,7 +4080,7 @@ void ShipProcessPacket (ORANGE* ship)
 				unsigned char fail_to_auth = 0;
 				unsigned gcn;
 				unsigned char slotnum;
-				unsigned char isgm;
+				unsigned char isgm = '\0';
 
 				gcn = *(unsigned*) &ship->decryptbuf[0x06];
 #ifdef NO_SQL
@@ -4344,7 +4345,7 @@ void CharacterProcessPacket (BANANA* client)
 				{
 					fail_to_auth = 0;
 					sprintf (&password[strlen(password)], "_%u_salt", account_data[ds]->regtime );
-					MDString (&password[0], &MDBuffer[0] );
+					MDString ((char*)&password[0], (char*)&MDBuffer[0] );
 					for (ch=0;ch<16;ch++)
 						sprintf (&md5password[ch*2], "%02x", (unsigned char) MDBuffer[ch]);
 					md5password[32] = 0;
@@ -4570,7 +4571,7 @@ void CharacterProcessPacket (BANANA* client)
 				memcpy (&client->encryptbuf[0], &PacketE6[0], sizeof (PacketE6));
 				*(unsigned *) &client->encryptbuf[0x10] = gcn;
 				client->guildcard = gcn;
-				itoa (gcn, &client->guildcard_string[0], 10); /* auth'd, bitch */
+                sprintf((char*)&client->guildcard_string[0], "%d", gcn); /* auth'd, bitch */
 				// Store some security shit in the E6 packet.
 				*(long long*) &client->encryptbuf[0x38] = security_sixtyfour_check;
 				if (security_thirtytwo_check == 0)
@@ -4793,7 +4794,7 @@ void LoginProcessPacket (BANANA* client)
 				{
 					fail_to_auth = 0;
 					sprintf (&password[strlen(password)], "_%u_salt", account_data[ds]->regtime );
-					MDString (&password[0], &MDBuffer[0] );
+					MDString ((char*)&password[0], (char*)&MDBuffer[0] );
 					for (ch=0;ch<16;ch++)
 						sprintf (&md5password[ch*2], "%02x", (unsigned char) MDBuffer[ch]);
 					md5password[32] = 0;
@@ -4805,7 +4806,7 @@ void LoginProcessPacket (BANANA* client)
 							fail_to_auth = 5;
 						if (!fail_to_auth)
 							gcn = account_data[ds]->guildcard;
-						if ((strcmp(&client->decryptbuf[0x8C], PSO_CLIENT_VER_STRING) != 0) || (client->decryptbuf[0x10] != PSO_CLIENT_VER))
+						if ((strcmp((char*)&client->decryptbuf[0x8C], PSO_CLIENT_VER_STRING) != 0) || (client->decryptbuf[0x10] != PSO_CLIENT_VER))
 							fail_to_auth = 7;
 						client->isgm = account_data[ds]->isgm;
 					}
@@ -5025,7 +5026,7 @@ void LoadQuestAllow ()
 			if ((allow_data[0] != 35) && (strlen(&allow_data[0]) > 5))
 				quest_numallows++;
 		}
-		quest_allow = malloc (quest_numallows * 4);
+		quest_allow = (unsigned int*) malloc (quest_numallows * 4);
 		ch = 0;
 		fseek ( fp, 0, SEEK_SET );
 		while (fgets (&allow_data[0], 255, fp) != NULL)
@@ -5092,17 +5093,17 @@ void LoadDropData()
 						strcat (&id_file[0], "drop\\ep4_mob_");
 						break;
 					}
-					itoa (d, &convert_ch[0], 10);
+                    sprintf(&convert_ch[0], "%d", d);
 					strcat (&id_file[0], &convert_ch[0]);
 					strcat (&id_file[0], "_");
-					itoa (ch2, &convert_ch[0], 10);
+                    sprintf(&convert_ch[0], "%d", ch2);
 					strcat (&id_file[0], &convert_ch[0]);
 					strcat (&id_file[0], ".txt");
 					ch3 = 0;
 					fp = fopen ( &id_file[0], "r" );
 					if (!fp)
 					{
-						printf ("Drop table not found \"%s\"", id_file[0] );
+						printf ("Drop table not found \"%s\"", &id_file[0] );
 						printf ("Hit [ENTER] to quit...");
 						gets   (&dp[0]);
 						exit   (1);
@@ -5121,12 +5122,12 @@ void LoadDropData()
 							{
 								if ( strlen ( &dp[0] ) < 6 )
 								{
-									printf ("Corrupted drop table \"%s\"", id_file[0] );
+									printf ("Corrupted drop table \"%s\"", &id_file[0] );
 									printf ("Hit [ENTER] to quit...");
 									gets   (&dp[0]);
 									exit   (1);
 								}
-								_strupr ( &dp[0] );
+                                toupper(dp[0]);
 								rt_table[ch3++] = hexToByte ( &dp[0] );
 								rt_table[ch3++] = hexToByte ( &dp[2] );
 								rt_table[ch3++] = hexToByte ( &dp[4] );
@@ -5143,7 +5144,7 @@ void LoadDropData()
 					fp = fopen ( &id_file[0], "r" );
 					if (!fp)
 					{
-						printf ("Drop table not found \"%s\"", id_file[0] );
+						printf ("Drop table not found \"%s\"", &id_file[0] );
 						printf ("Hit [ENTER] to quit...");
 						gets   (&dp[0]);
 						exit   (1);
@@ -5166,12 +5167,12 @@ void LoadDropData()
 							case 0x02:
 								if ( strlen ( &dp[0] ) < 6 )
 								{
-									printf ("Corrupted drop table \"%s\"", id_file[0] );
+									printf ("Corrupted drop table \"%s\"", &id_file[0] );
 									printf ("Hit [ENTER] to quit...");
 									gets   (&dp[0]);
 									exit   (1);
 								}
-								_strupr ( &dp[0] );
+                                toupper(dp[0]);
 								rt_table[0x1B3 + ((ch3-0x194)*4)] = hexToByte ( &dp[0] );
 								rt_table[0x1B4 + ((ch3-0x194)*4)] = hexToByte ( &dp[2] );
 								rt_table[0x1B5 + ((ch3-0x194)*4)] = hexToByte ( &dp[4] );
@@ -5311,9 +5312,7 @@ LRESULT CALLBACK WndProc( HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam 
 **
 ********************************************************/
 
-int
-main( int argc, char * argv[] )
-{
+int main( int argc, char * argv[] ) {
 	unsigned ch,ch2;
 	struct in_addr login_in;
 	struct in_addr character_in;
