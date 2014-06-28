@@ -725,7 +725,7 @@ void convertIPString (char* IPData, unsigned IPLen, int fromConfig )
 						printf ("tethealla.ini is corrupted. (Failed to read IP information from file!)\n"); else
 						printf ("Failed to determine IP address.\n");
 					printf ("Hit [ENTER]");
-					gets (&dp[0]);
+					//gets (&dp[0]);
 					exit (1);
 				}
 			}
@@ -738,7 +738,7 @@ void convertIPString (char* IPData, unsigned IPLen, int fromConfig )
 						printf ("tethealla.ini is corrupted. (Failed to read IP information from file!)\n"); else
 						printf ("Failed to determine IP address.\n");
 					printf ("Hit [ENTER]");
-					gets (&dp[0]);
+					//gets (&dp[0]);
 					exit (1);
 				}
 				break;
@@ -779,7 +779,7 @@ void construct0xEB()
 	{
 		printf ("Missing e8send.txt\n");
 		printf ("Hit [ENTER]");
-		gets (&dp[0]);
+		//gets (&dp[0]);
 		exit (1);
 	}
 	PacketEB01[0x02] = 0xEB;
@@ -798,7 +798,7 @@ void construct0xEB()
 		{
 			printf ("Could not open %s!\n", &EBFiles[ch][0]);
 			printf ("Hit [ENTER]");
-			gets (&dp[0]);
+			//gets (&dp[0]);
 			exit (1);
 		}
 		fseek (fpb, 0, SEEK_END);
@@ -848,7 +848,7 @@ void construct0xEB()
 		{
 			printf ("Too much patch data to send.\n");
 			printf ("Hit [ENTER]");
-			gets (&dp[0]);
+			//gets (&dp[0]);
 			exit (1);
 		}
 	}
@@ -885,7 +885,7 @@ void load_config_file()
 	{
 		printf ("The configuration file tethealla.ini appears to be missing.\n");
 		printf ("Hit [ENTER]");
-		gets (&dp[0]);
+		//gets (&dp[0]);
 		exit (1);
 	}
 	else
@@ -939,7 +939,7 @@ void load_config_file()
 							if (!pn_host) {
 								printf ("Could not resolve www.pioneer2.net\n");
 								printf ("Hit [ENTER]");
-								gets (&dp[0]);
+								//gets (&dp[0]);
 								exit (1);
 							}
 
@@ -948,7 +948,7 @@ void load_config_file()
 							{
 								printf ("Unable to create TCP/IP streaming socket.");
 								printf ("Hit [ENTER]");
-								gets (&dp[0]);
+								//gets (&dp[0]);
 								exit(1);
 							}
 
@@ -966,7 +966,7 @@ void load_config_file()
 							{
 								printf ("\nCannot connect to www.pioneer2.net!");
 								printf ("Hit [ENTER]");
-								gets (&dp[0]);
+								//gets (&dp[0]);
 								exit(1);
 							}
 
@@ -974,7 +974,7 @@ void load_config_file()
 
 							send_to_server ( pn_sockfd, HTTP_REQ );
 							pn_len = recv(pn_sockfd, &pn_buf[0], sizeof(pn_buf) - 1, 0);
-							closesocket (pn_sockfd);
+							close (pn_sockfd);
 							pn_buf[pn_len] = 0;
 							pn_ipdata = strstr (&pn_buf[0], "/html");
 							if (!pn_ipdata)
@@ -1114,7 +1114,7 @@ unsigned char PacketA0Data[0x4000] = {0};
 unsigned short PacketA0Size = 0;
 const char serverName[] = { "T\0E\0T\0H\0E\0A\0L\0L\0A\0" };
 
-const char NoShips[9] = "No ships!";
+const char NoShips[] = "No ships!";
 
 void construct0xA0()
 {
@@ -1231,7 +1231,7 @@ void initialize_connection (BANANA* connect)
 				serverConnectionList[ch2++] = serverConnectionList[ch];
 		}
 		serverNumConnections = ch2;
-		closesocket (connect->plySockfd);
+		close(connect->plySockfd);
 	}
 	memset (connect, 0, sizeof (BANANA));
 	connect->plySockfd = -1;
@@ -1256,7 +1256,7 @@ void initialize_ship (ORANGE* ship)
 				serverShipList[ch2++] = serverShipList[ch];
 		}
 		serverNumShips = ch2;
-		closesocket (ship->shipSockfd);
+		close(ship->shipSockfd);
 	}
 	memset (ship, 0, sizeof (ORANGE) );
 	for (ch=0;ch<128;ch++)
