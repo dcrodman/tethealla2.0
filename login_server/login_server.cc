@@ -39,10 +39,11 @@
 
 extern "C" {
     #include <jansson.h>
+    #include "utils.h"
+    #include "md5.h"
 }
 
 #include <mysql.h>
-#include <md5.h>
 
 #include	"pso_crypt.h"
 #include	"bbtable.h"
@@ -649,6 +650,24 @@ void decryptcopy (unsigned char* dest, const unsigned char* src, unsigned size);
 void compressShipPacket ( ORANGE* ship, unsigned char* src, unsigned long src_size );
 void decompressShipPacket ( ORANGE* ship, unsigned char* dest, unsigned char* src );
 
+
+void debug_perror( char * msg ) {
+	debug( "%s : %s\n" , msg , strerror(errno) );
+}
+/*****************************************************************************/
+void debug(char *fmt, ...)
+{
+#define MAX_MESG_LEN 1024
+
+	va_list args;
+	char text[ MAX_MESG_LEN ];
+
+	va_start (args, fmt);
+	strcpy (text + vsprintf( text,fmt,args), "\r\n");
+	va_end (args);
+
+	fprintf( stderr, "%s", text);
+}
 
 void WriteLog(char *fmt, ...)
 {
@@ -6390,102 +6409,6 @@ void pso_crypt_table_init_bb(PSO_CRYPT *pcry, const unsigned char *salt)
 		ou=ou+0x400;
 	}
 }
-
-unsigned RleEncode(unsigned char *src, unsigned char *dest, unsigned src_size)
-{
-	unsigned char currChar, prevChar;             /* current and previous characters */
-	unsigned short count;                /* number of characters in a run */
-	unsigned src_end, dest_start;
-
-	dest_start = (unsigned)dest;
-	src_end = (unsigned)src + src_size;
-
-	prevChar  = 0xFF - *src;
-
-	while ((unsigned) src < src_end)
-	{
-		currChar = *(dest++) = *(src++);
-
-		if ( currChar == prevChar )
-		{
-			if ( (unsigned) src == src_end )
-			{
-				*(dest++) = 0;
-				*(dest++) = 0;
-			}
-			else
-			{
-				count = 0;
-				while (((unsigned)src < src_end) && (count < 0xFFF0))
-				{
-					if (*src == prevChar)
-					{
-						count++;
-						src++;
-						if ( (unsigned) src == src_end )
-						{
-							*(unsigned short*) dest = count;
-							dest += 2;
-						}
-					}
-					else
-					{
-						*(unsigned short*) dest = count;
-						dest += 2;
-						prevChar = 0xFF - *src;
-						break;
-					}
-				}
-			}
-		}
-		else
-			prevChar = currChar;
-	}
-	return (unsigned)dest - dest_start;
-}
-
-void RleDecode(unsigned char *src, unsigned char *dest, unsigned src_size)
-{
-    unsigned char currChar, prevChar;             /* current and previous characters */
-    unsigned short count;                /* number of characters in a run */
-	unsigned src_end;
-
-	src_end = (unsigned) src + src_size;
-
-    /* decode */
-
-    prevChar = 0xFF - *src;     /* force next char to be different */
-
-    /* read input until there's nothing left */
-
-    while ((unsigned) src < src_end)
-    {
-		currChar = *(src++);
-
-		*(dest++) = currChar;
-
-        /* check for run */
-        if (currChar == prevChar)
-        {
-            /* we have a run.  write it out. */
-			count = *(unsigned short*) src;
-			src += 2;
-            while (count > 0)
-            {
-				*(dest++) = currChar;
-                count--;
-            }
-
-            prevChar = 0xFF - *src;     /* force next char to be different */
-        }
-        else
-        {
-            /* no run */
-            prevChar = currChar;
-        }
-    }
-}
-
 
 /* expand a key (makes a rc4_key) */
 

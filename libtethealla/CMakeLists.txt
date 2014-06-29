@@ -23,6 +23,11 @@ set (MD5_SOURCES
 	${INCL_DR}/md5.h
 	)
 
+set (UTILS_SOURCES
+	utils/utils.c
+	${INCL_DR}/utils.h
+	)
+
 # Export this directory to the parent scope so that other binaries
 # in the project can be built individually and include this library.
 set(LIBTETHEALLA_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/${INCL_DR})
@@ -32,5 +37,5 @@ if (TARGET tethealla)
 	message('libtethealla is already defined.')
 else(TARGET tethealla)
 	include_directories(${LIBTETHEALLA_INCLUDE_DIR})
-	add_library(tethealla STATIC ${ENCRYPTION_SOURCES} ${SNIFFEX_SOURCES} ${MD5_SOURCES})
+	add_library(tethealla STATIC ${ENCRYPTION_SOURCES} ${SNIFFEX_SOURCES} ${MD5_SOURCES} ${UTILS_SOURCES})
 endif(TARGET tethealla)
