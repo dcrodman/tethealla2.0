@@ -546,9 +546,7 @@ int load_patches(const char* dirname) {
                 memcpy(patch_entry->filename, file->d_name, fname_len + 1);
 
                 // Path relative to the PSOBB working directory.
-                strncat(patch_entry->relative_path, dirname, strlen(dirname));
-                strncat(patch_entry->relative_path, "/", 1);
-                strncat(patch_entry->relative_path, file->d_name, fname_len);
+                sprintf(patch_entry->relative_path, "%s%s", dirname, file->d_name);
 
                 FILE* fd = fopen(patch_entry->relative_path, "r");
                 if (fd == NULL) {
@@ -594,9 +592,7 @@ int load_patches(const char* dirname) {
             } else if (file->d_type == DT_DIR) {
                 // TODO: (minor) Estimate/determine the potential filename length more precisely.
                 char subdir[512] = {0};
-                strncat(subdir, dirname, strlen(dirname));
-                strncat(subdir, file->d_name, strlen(file->d_name));
-                strncat(subdir, "/", 1);
+                sprintf(subdir, "%s%s/", dirname, file->d_name);
                 patch_steps++;
                 load_patches(subdir);
                 patch_steps--;
@@ -624,8 +620,7 @@ int load_config() {
     if (!cfg_file) {
         // Look in LOCAL_DIR in case the files were placed there instead.
         char config_dir[128];
-        strncat(config_dir, LOCAL_DIR, strlen(LOCAL_DIR));
-        strncat(config_dir, CFG_NAME, strlen(CFG_NAME));
+        sprintf(config_dir, "%s%s", LOCAL_DIR, CFG_NAME);
 
         printf("Failed.\nLoading config file in %s...", config_dir);
         cfg_file = json_load_file(config_dir, JSON_DECODE_ANY, &error);
