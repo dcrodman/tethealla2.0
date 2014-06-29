@@ -901,8 +901,7 @@ int load_config() {
     if (!cfg_file) {
         // Look in LOCAL_DIR in case the files were placed there instead.
         char config_dir[128];
-        strncat(config_dir, LOCAL_DIR, strlen(LOCAL_DIR));
-        strncat(config_dir, CFG_NAME, strlen(CFG_NAME));
+        sprintf(config_dir, "%s%s", LOCAL_DIR, CFG_NAME);
 
         printf("Failed.\nLoading config file in %s...", config_dir);
         cfg_file = json_load_file(config_dir, JSON_DECODE_ANY, &error);
