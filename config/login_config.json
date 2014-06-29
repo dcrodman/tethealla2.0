@@ -1,0 +1,27 @@
+{
+	"mysql" : {
+		"username" : "psoadmin",
+		"password" : "psobb",
+		"host" : "localhost",
+		"port" : 80,
+		"database" : "tethealla"
+	},
+	"server_ip" : "127.0.0.1",
+	"server_port" : 12000,
+	"welcome_message" : "Unconfigured",
+	"max_client_connections" : 1000,
+	"max_ship_connections" : 1,
+	"rare_appearance_rates" : {
+		"hildebear" : 7,
+		"rappy" : 8,
+		"lilly" : 8,
+		"slime" : 7,
+		"merissa" : 7,
+		"panzuzu" : 7,
+		"dorphon_eclair" : 7,
+		"kondrieu" : 7
+	},
+	"global_gm_color" : "1D94F7",
+	"local_gm_color" : "B0CEDE",
+	"normal_color" : "FFFFFF"
+}
