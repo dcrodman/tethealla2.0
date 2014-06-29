@@ -21,7 +21,6 @@
 // - Limit to 40 guild cards for now.
 //
 
-#define NO_SQL
 #define NO_CONNECT_TEST
 
 #include <cstdlib>
@@ -29,6 +28,7 @@
 #include <cstring>
 #include <cstdarg>
 #include <cctype>
+#include <cerrno>
 
 #include <sys/time.h>
 #include <arpa/inet.h>
@@ -41,9 +41,7 @@ extern "C" {
     #include <jansson.h>
 }
 
-#ifndef NO_SQL
 #include <mysql.h>
-#endif
 #include <md5.h>
 
 #include	"pso_crypt.h"
@@ -97,11 +95,6 @@ const char *PSO_CLIENT_VER_STRING = "TethVer12510";
 
 const char *CFG_NAME = "login_config.json";
 const char *LOCAL_DIR = "/usr/local/share/tethealla/config/";
-
-timeval select_timeout = {
-	0, 
-	5000
-};
 
 /* functions */
 
@@ -656,17 +649,6 @@ void decryptcopy (unsigned char* dest, const unsigned char* src, unsigned size);
 void compressShipPacket ( ORANGE* ship, unsigned char* src, unsigned long src_size );
 void decompressShipPacket ( ORANGE* ship, unsigned char* dest, unsigned char* src );
 
-#ifdef NO_SQL
-
-void UpdateDataFile ( const char* filename, unsigned count, void* data, unsigned record_size, int new_record );
-void DumpDataFile ( const char* filename, unsigned* count, void** data, unsigned record_size );
-
-unsigned lastdump = 0;
-
-#endif
-
-#define MYWM_NOTIFYICON (WM_USER+2)
-int program_hidden = 1;
 
 void WriteLog(char *fmt, ...)
 {
@@ -1327,7 +1309,7 @@ void SendE2 (BANANA* client)
 			else
 			{
 				//debug ("Key data does not exist...");
-				mysql_real_escape_string ( myData, &key_data_send[0], &E2_Base[0x11C], 420 );
+				mysql_real_escape_string ( myData, (char*)&key_data_send[0], (const char*)&E2_Base[0x11C], 420 );
 				sprintf (&myQuery[0], "INSERT INTO key_data (guildcard, controls) VALUES ('%u','%s')", client->guildcard, (char*) &key_data_send[0] );
 				memcpy (&PacketE2Data[0x11C], &E2_Base[0x11C], 420);
 				if ( mysql_query ( myData, &myQuery[0] ) )
@@ -1460,7 +1442,7 @@ void AckCharacter_Creation(unsigned char slotnum, BANANA* client)
 
 #ifndef NO_SQL
 
-			mysql_real_escape_string ( myData, &chardata[0], &client->decryptbuf[0x10], 0x78 );
+			mysql_real_escape_string ( myData, (char*)&chardata[0], (const char*)&client->decryptbuf[0x10], 0x78 );
 
 #endif
 
@@ -1641,7 +1623,7 @@ void AckCharacter_Creation(unsigned char slotnum, BANANA* client)
 
 #ifndef NO_SQL
 			
-			mysql_real_escape_string ( myData, &E7chardata[0], (unsigned char*) NewE7, sizeof (CHARDATA) );
+			mysql_real_escape_string ( myData, (char*)&E7chardata[0], (const char*) NewE7, sizeof (CHARDATA) );
 
 #endif
 
@@ -1754,8 +1736,8 @@ void AckCharacter_Creation(unsigned char slotnum, BANANA* client)
 					memcpy (&NewE7->gcString[0], &clientchar->gcString[0], 0x68);
 					*(long long*) &clientchar->unknown5[0] = *(long long*) &NewE7->unknown6[0];
 					//NewE7->playTime = 0;
-					mysql_real_escape_string ( myData, &chardata[0], &client->decryptbuf[0x10], 0x78 );
-					mysql_real_escape_string ( myData, &E7chardata[0], (unsigned char*) NewE7, sizeof (CHARDATA) );
+					mysql_real_escape_string ( myData, (char*)&chardata[0], (const char*)&client->decryptbuf[0x10], 0x78 );
+					mysql_real_escape_string ( myData, (char*)&E7chardata[0], (const char*) NewE7, sizeof (CHARDATA) );
 				}
 			}
 			mysql_free_result ( myResult );
@@ -2844,7 +2826,7 @@ void ShipProcessPacket (ORANGE* ship)
 							{
 								// Create bank
 								memcpy (&ship->encryptbuf[0x0C+sizeof(CHARDATA)], &empty_bank, sizeof (BANK));
-								mysql_real_escape_string ( myData, &E7chardata[0], (unsigned char*) &empty_bank, sizeof (BANK) );
+								mysql_real_escape_string ( myData, (char*)&E7chardata[0], (const char*) &empty_bank, sizeof (BANK) );
 
 								sprintf (&myQuery[0], "INSERT into bank_data (guildcard, data) VALUES ('%u','%s')", guildcard, (char*) &E7chardata[0] );
 								if ( mysql_query ( myData, &myQuery[0] ) )
@@ -2865,7 +2847,7 @@ void ShipProcessPacket (ORANGE* ship)
 
 						// Update the last used character info...
 
-						mysql_real_escape_string ( myData, &E7chardata[0], (unsigned char*) &PlayerData->name[0], 24 );
+						mysql_real_escape_string ( myData, (char*)&E7chardata[0], (const char*) &PlayerData->name[0], 24 );
 						sprintf (&myQuery[0], "UPDATE account_data SET lastchar = '%s' WHERE guildcard = '%u'", (char*) &E7chardata[0], PlayerData->guildCard );
 						mysql_query ( myData, &myQuery[0] );
 
@@ -2955,7 +2937,7 @@ void ShipProcessPacket (ORANGE* ship)
 
 #else
 
-				mysql_real_escape_string ( myData, &E7chardata[0], (unsigned char*) &ship->decryptbuf[0x0C+sizeof(CHARDATA)], sizeof (BANK) );
+				mysql_real_escape_string ( myData, (char*)&E7chardata[0], (const char*) &ship->decryptbuf[0x0C+sizeof(CHARDATA)], sizeof (BANK) );
 				sprintf (&myQuery[0], "UPDATE bank_data set data = '%s' WHERE guildcard = '%u'", (char*) &E7chardata[0], guildcard );
 				if ( mysql_query ( myData, &myQuery[0] ) )
 				{
@@ -3053,7 +3035,7 @@ void ShipProcessPacket (ORANGE* ship)
 					}
 				}
 #else
-				mysql_real_escape_string ( myData, &E7chardata[0], (unsigned char*) &ship->decryptbuf[0x0C], sizeof (CHARDATA) );
+				mysql_real_escape_string ( myData, (char*)&E7chardata[0], (const char*) &ship->decryptbuf[0x0C], sizeof (CHARDATA) );
 				sprintf (&myQuery[0], "UPDATE character_data set data = '%s' WHERE guildcard = '%u' AND slot = '%u'", (char*) &E7chardata[0], guildcard, slotnum );
 				if ( mysql_query ( myData, &myQuery[0] ) )
 				{
@@ -3080,7 +3062,7 @@ void ShipProcessPacket (ORANGE* ship)
 					}
 				}
 #else
-				mysql_real_escape_string ( myData, &E7chardata[0], (unsigned char*) &ship->decryptbuf[0x2FCC], 420 );
+				mysql_real_escape_string ( myData, (char*)&E7chardata[0], (const char*) &ship->decryptbuf[0x2FCC], 420 );
 				sprintf (&myQuery[0], "UPDATE key_data set controls = '%s' WHERE guildcard = '%u'", (char*) &E7chardata[0], guildcard );
 				if ( mysql_query ( myData, &myQuery[0] ) )
 					debug ("Could not save control information for guild card user %u", guildcard);
@@ -3233,8 +3215,8 @@ void ShipProcessPacket (ORANGE* ship)
 
 				if ( num_gcs < 40 )
 				{
-					mysql_real_escape_string (myData, &gcname[0], &ship->decryptbuf[0x0E], 24);
-					mysql_real_escape_string (myData, &gctext[0], &ship->decryptbuf[0x26], 176);
+					mysql_real_escape_string (myData, (char*)&gcname[0], (const char*)&ship->decryptbuf[0x0E], 24);
+					mysql_real_escape_string (myData, (char*)&gctext[0], (const char*)&ship->decryptbuf[0x26], 176);
 
 					friendSecID = ship->decryptbuf[0xD6];
 					friendClass = ship->decryptbuf[0xD7];
@@ -3304,7 +3286,7 @@ void ShipProcessPacket (ORANGE* ship)
 					}
 				}
 #else
-				mysql_real_escape_string (myData, &gctext[0], &ship->decryptbuf[0x0E], 0x44);
+				mysql_real_escape_string (myData, (char*)&gctext[0], (const char*)&ship->decryptbuf[0x0E], 0x44);
 
 				sprintf (&myQuery[0], "UPDATE guild_data set comment = '%s' WHERE accountid = '%u' AND friendid = '%u'", (char*) &gctext[0], clientGcn, friendGcn );
 
@@ -3684,7 +3666,7 @@ void ShipProcessPacket (ORANGE* ship)
 					}
 				}
 #else
-				mysql_real_escape_string (myData, &TeamNameCheck[0], &ship->decryptbuf[0x06], 24);
+				mysql_real_escape_string (myData, (char*)&TeamNameCheck[0], (const char*)&ship->decryptbuf[0x06], 24);
 				sprintf (&myQuery[0], "SELECT * from team_data WHERE name='%s'", (char*) &TeamNameCheck[0] );
 				if ( ! mysql_query ( myData, &myQuery[0] ) )
 				{
@@ -3784,7 +3766,7 @@ void ShipProcessPacket (ORANGE* ship)
 					}
 				}
 #else
-				mysql_real_escape_string ( myData, &FlagSlashes[0], &ship->decryptbuf[0x06], 0x800 );
+				mysql_real_escape_string ( myData, (char*)&FlagSlashes[0], (const char*)&ship->decryptbuf[0x06], 0x800 );
 				sprintf ( &myQuery[0], "UPDATE team_data SET flag='%s' WHERE teamid='%u'", (char*) &FlagSlashes[0], teamid );
 				if (! mysql_query ( myData, &myQuery[0] ) )
 				{
@@ -4429,7 +4411,7 @@ void CharacterProcessPacket (BANANA* client)
 			}
 
 #else
-			mysql_real_escape_string ( myData, &hwinfo[0], &client->decryptbuf[0x84], 8);
+			mysql_real_escape_string ( myData, (char*)&hwinfo[0], (const char*)&client->decryptbuf[0x84], 8);
 			memcpy (&client->hwinfo[0], &hwinfo[0], 18);
 			sprintf (&myQuery[0], "SELECT * from account_data WHERE username='%s'", username );
 
@@ -4446,7 +4428,7 @@ void CharacterProcessPacket (BANANA* client)
 					myRow = mysql_fetch_row ( myResult );
 					max_fields = mysql_num_fields ( myResult );
 					sprintf (&password[strlen(password)], "_%s_salt", myRow[3] );
-					MDString (&password[0], &MDBuffer[0] );
+					MDString ((char*)&password[0], (char*)&MDBuffer[0] );
 					for (ch=0;ch<16;ch++)
 						sprintf (&md5password[ch*2], "%02x", (unsigned char) MDBuffer[ch]);
 					md5password[32] = 0;
@@ -4819,7 +4801,7 @@ void LoginProcessPacket (BANANA* client)
 			// DO HW BAN LATER
 
 #else
-			mysql_real_escape_string ( myData, &hwinfo[0], &client->decryptbuf[0x84], 8);
+			mysql_real_escape_string ( myData, (char*)&hwinfo[0], (const char*) &client->decryptbuf[0x84], 8);
 			memcpy (&client->hwinfo[0], &hwinfo[0], 18);
 
 			sprintf (&myQuery[0], "SELECT * from account_data WHERE username='%s'", username );
@@ -4837,7 +4819,7 @@ void LoginProcessPacket (BANANA* client)
 					myRow = mysql_fetch_row ( myResult );
 					max_fields = mysql_num_fields ( myResult );
 					sprintf (&password[strlen(password)], "_%s_salt", myRow[3] );
-					MDString (&password[0], &MDBuffer[0] );
+					MDString ((char*)&password[0], (char*)&MDBuffer[0] );
 					for (ch=0;ch<16;ch++)
 						sprintf (&md5password[ch*2], "%02x", (unsigned char) MDBuffer[ch]);
 					md5password[32] = 0;
@@ -4851,7 +4833,7 @@ void LoginProcessPacket (BANANA* client)
 							fail_to_auth = 5;
 						if (!fail_to_auth)
 							gcn = atoi (myRow[6]);
-						if ((strcmp(&client->decryptbuf[0x8C], PSO_CLIENT_VER_STRING) != 0) || (client->decryptbuf[0x10] != PSO_CLIENT_VER))
+						if ((strcmp((char*)&client->decryptbuf[0x8C], PSO_CLIENT_VER_STRING) != 0) || (client->decryptbuf[0x10] != PSO_CLIENT_VER))
 							fail_to_auth = 7;
 						client->isgm = atoi (myRow[7]);
 		}
@@ -5190,88 +5172,9 @@ void LoadDropData()
 	}
 }
 
-#ifdef NO_SQL
-
-void UpdateDataFile ( const char* filename, unsigned count, void* data, unsigned record_size, int new_record )
-{
-	FILE* fp;
-	unsigned fs;
-
-	fp = fopen (filename, "r+b");
-	if (fp)
-	{
-		fseek (fp, 0, SEEK_END);
-		fs = ftell (fp);
-		if ((count * record_size) <= fs)
-		{
-			fseek (fp, count * record_size, SEEK_SET);
-			fwrite (data, 1, record_size, fp);
-		}
-		else
-			debug ("Could not seek to record for updating in %s", filename);
-		fclose (fp);
-	}
-	else
-	{
-		fp = fopen (filename, "wb");
-		if (fp)
-		{
-			fwrite (data, 1, record_size, fp); // Has to be the first record...
-			fclose (fp);
-		}
-		else
-			debug ("Could not open %s for writing!\n", filename);
-	}
+inline int max(int a, int b) {
+    return a > b ? a : b;
 }
-
-
-void DumpDataFile ( const char* filename, unsigned* count, void** data, unsigned record_size )
-{
-	FILE* fp;
-	unsigned ch;
-
-	printf ("Dumping \"%s\" ... ", filename);
-	fp = fopen (filename, "wb");
-	if (fp)
-	{
-		for (ch=0;ch<*count;ch++)
-			fwrite (data[ch], 1, record_size, fp);
-		fclose (fp);
-	}
-	else
-		debug ("Could not open %s for writing!\n", filename);
-	printf ("done!\n");
-}
-
-void LoadDataFile ( const char* filename, unsigned* count, void** data, unsigned record_size )
-{
-	FILE* fp;
-	unsigned ch;
-
-	printf ("Loading \"%s\" ... ", filename);
-	fp = fopen (filename, "rb");
-	if (fp)
-	{
-		fseek (fp, 0, SEEK_END);
-		*count = ftell (fp) / record_size;
-		fseek (fp, 0, SEEK_SET);
-		for (ch=0;ch<*count;ch++)
-		{
-			data[ch] = malloc (record_size);
-			if (!data[ch])
-			{
-				printf ("Out of memory!\nHit [ENTER]");
-				gets (&dp[0]);
-				exit (1);
-			}
-			fread (data[ch], 1, record_size, fp);
-		}
-		fclose (fp);
-	}
-	printf ("done!\n");
-}
-
-#endif
 
 /********************************************************
 **
@@ -5290,6 +5193,11 @@ int main( int argc, char * argv[] ) {
 	int pkt_len, pkt_c, bytes_sent;
 	unsigned short this_packet;
 	unsigned ship_this_packet;
+
+    timeval select_timeout = {
+        0,
+        5000
+    };
 
 	FILE* fp;
 	//int wserror;
@@ -5324,18 +5232,6 @@ int main( int argc, char * argv[] ) {
 	for (ch=0;ch<200;ch++)
 		empty_bank.bankInventory[ch].itemid = 0xFFFFFFFF;
 
-#ifdef NO_SQL
-	LoadDataFile ("account.dat", &num_accounts, &account_data[0], sizeof(L_ACCOUNT_DATA));
-	LoadDataFile ("bank.dat", &num_bankdata, &bank_data[0], sizeof(L_BANK_DATA));
-	LoadDataFile ("character.dat", &num_characters, &character_data[0], sizeof(L_CHARACTER_DATA));
-	LoadDataFile ("guild.dat", &num_guilds, &guild_data[0], sizeof(L_GUILD_DATA));
-	//LoadDataFile ("hwbans.dat", &num_hwbans, &hw_bans[0], sizeof(L_HW_BANS));
-	//LoadDataFile ("ipbans.dat", &num_ipbans, &ip_bans[0], sizeof(L_IP_BANS));
-	LoadDataFile ("keydata.dat", &num_keydata, &key_data[0], sizeof(L_KEY_DATA));
-	LoadDataFile ("security.dat", &num_security, &security_data[0], sizeof(L_SECURITY_DATA));
-	LoadDataFile ("shipkey.dat", &num_shipkeys, &ship_data[0], sizeof(L_SHIP_DATA));
-	LoadDataFile ("team.dat", &num_teams, &team_data[0], sizeof(L_TEAM_DATA));
-#endif
 	printf ("Loading PlyLevelTbl.bin ...");
 	fp = fopen ( "PlyLevelTbl.bin", "rb" );
 	if (!fp)
@@ -5380,7 +5276,6 @@ int main( int argc, char * argv[] ) {
 	LoadDropData();
 	printf ("... done!\n");
 #ifdef DEBUG_OUTPUT
-#ifndef NO_SQL
 	printf ("\nMySQL connection parameters\n");
 	printf ("///////////////////////////\n");
 	printf ("Host: %s\n", mySQL_Host );
@@ -5388,7 +5283,6 @@ int main( int argc, char * argv[] ) {
 	printf ("Username: %s\n", mySQL_Username );
 	printf ("Password: %s\n", mySQL_Password );
 	printf ("Database: %s\n", mySQL_Database );
-#endif
 #endif
 	printf ("\nLogin server parameters\n");
 	printf ("///////////////////////\n");
@@ -5432,7 +5326,6 @@ int main( int argc, char * argv[] ) {
 	construct0xA0();
 	printf ("  OK!\n\n");
 
-#ifndef NO_SQL
 	printf ("Connecting up to the MySQL database ...");
 
 	if ( (myData = mysql_init((MYSQL*) 0)) && 
@@ -5463,21 +5356,6 @@ int main( int argc, char * argv[] ) {
 	mysql_query (myData, &myQuery[0]);
 	printf ("  OK!\n\n");
 
-#endif
-
-	printf ("Getting max ship key count... ");
-
-#ifdef NO_SQL
-
-	max_ship_keys = 0;
-	for (ds=0;ds<num_shipkeys;ds++)
-	{
-		if (ship_data[ds]->idx >= max_ship_keys)
-			max_ship_keys = ship_data[ds]->idx;					
-	}
-
-#else
-
 	sprintf (&myQuery[0], "SELECT * from ship_data" );
 
 	if ( ! mysql_query ( myData, &myQuery[0] ) )
@@ -5503,8 +5381,6 @@ int main( int argc, char * argv[] ) {
 		printf ("Unable to query the key database.\n");
 	}
 
-#endif
-
 	printf (" OK!\n");
 
 	printf ("Loading default.flag ...");
@@ -5518,9 +5394,7 @@ int main( int argc, char * argv[] ) {
 	}
 	fread ( &DefaultTeamFlag[0], 1, 2048, fp );
 	fclose ( fp );
-#ifndef NO_SQL
-	mysql_real_escape_string (myData, &DefaultTeamFlagSlashes[0], &DefaultTeamFlag[0], 2048);
-#endif
+	mysql_real_escape_string (myData, (char*)&DefaultTeamFlagSlashes[0], (const char*)&DefaultTeamFlag[0], 2048);
 	printf (" OK!\n");
 
 	/* Open the PSO BB Login Server Port... */
@@ -5588,41 +5462,6 @@ int main( int argc, char * argv[] ) {
 		/* Ping pong?! */
 
 		servertime = time(NULL);
-
-		/* Process the system tray icon */
-
-		if ( backupHwnd != hwndWindow )
-		{
-			debug ("hwndWindow has been corrupted...");
-			//display_packet ( (unsigned char*) &hwndWindow, sizeof (HWND));
-			hwndWindow = backupHwnd;
-			WriteLog ("hwndWindow corrupted %s", (char*) &dp[0] );
-		}
-
-		if ( PeekMessage( &msg, hwndWindow, 0, 0, 1 ) )
-		{
-			TranslateMessage(&msg);
-			DispatchMessage(&msg);
-		}
-
-
-#ifdef NO_SQL
-
-		if ( (unsigned) servertime - lastdump > 600 )
-		{
-			printf ("Refreshing account and ship key databases...\n");
-			for (ch=0;ch<num_accounts;ch++)
-				free (account_data[ch]);
-			num_accounts = 0;
-			LoadDataFile ("account.dat", &num_accounts, &account_data[0], sizeof(L_ACCOUNT_DATA));
-			for (ch=0;ch<num_shipkeys;ch++)
-				free (ship_data[ch]);
-			num_shipkeys = 0;
-			LoadDataFile ("shipkey.dat", &num_shipkeys, &ship_data[0], sizeof(L_SHIP_DATA));
-			lastdump = (unsigned) servertime;
-		}
-
-#endif
 
 		/* Clear socket activity flags. */
 
@@ -5765,7 +5604,7 @@ int main( int argc, char * argv[] ) {
 				{
 					listen_length = sizeof (listen_in);
 					workConnect = connections[ch];
-					if ( ( workConnect->plySockfd = tcp_accept ( login_sockfd, (struct sockaddr*) &listen_in, &listen_length ) ) >= 0 )
+					if ( ( workConnect->plySockfd = tcp_accept (login_sockfd, (struct sockaddr*) &listen_in, listen_length ) ) >= 0 )
 					{
 						workConnect->connection_index = ch;
 						serverConnectionList[serverNumConnections++] = ch;
@@ -5786,7 +5625,7 @@ int main( int argc, char * argv[] ) {
 				{
 					listen_length = sizeof (listen_in);
 					workConnect = connections[ch];
-					if ( ( workConnect->plySockfd = tcp_accept ( character_sockfd, (struct sockaddr*) &listen_in, &listen_length ) ) >= 0 )
+					if ( ( workConnect->plySockfd = tcp_accept ( character_sockfd, (struct sockaddr*) &listen_in, listen_length ) ) >= 0 )
 					{
 						workConnect->connection_index = ch;
 						serverConnectionList[serverNumConnections++] = ch;
@@ -6047,9 +5886,7 @@ int main( int argc, char * argv[] ) {
 			}
 		}
 	}
-#ifndef NO_SQL
 	mysql_close( myData ) ;
-#endif
 	return 0;
 }
 
@@ -6178,7 +6015,7 @@ int tcp_sock_open(struct in_addr ip, int port)
 * same as debug_perror but writes to debug output.
 * 
 *****************************************************************************/
-void debug_perror(const char * msg ) {
+void debug_perror(const char *msg ) {
 	debug( "%s : %s\n" , msg , strerror(errno) );
 }
 /*****************************************************************************/
