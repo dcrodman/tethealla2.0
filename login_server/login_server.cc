@@ -103,7 +103,7 @@ int receive_from_server(int sock, char* packet);
 void debug(char *fmt, ...);
 void debug_perror(char * msg);
 void tcp_listen (int sockfd);
-int tcp_accept (int sockfd, struct sockaddr *client_addr, int *addr_len );
+int tcp_accept (int sockfd, struct sockaddr *client_addr, int addr_len);
 int tcp_sock_connect(char* dest_addr, int port);
 int tcp_sock_open(struct in_addr ip, int port);
 
@@ -5646,7 +5646,7 @@ int main( int argc, char * argv[] ) {
 				{
 					listen_length = sizeof (listen_in);
 					workShip = ships[ch];
-					if ( ( workShip->shipSockfd = tcp_accept ( ship_sockfd, (struct sockaddr*) &listen_in, &listen_length ) ) >= 0 )
+					if ( ( workShip->shipSockfd = tcp_accept ( ship_sockfd, (struct sockaddr*) &listen_in, listen_length ) ) >= 0 )
 					{
 						workShip->connection_index = ch;
 						serverShipList[serverNumShips++] = ch;
@@ -5754,7 +5754,7 @@ int main( int argc, char * argv[] ) {
 
 						bytes_sent = send (workConnect->plySockfd, &workConnect->sndbuf[workConnect->sndwritten],
 							workConnect->snddata - workConnect->sndwritten, 0);
-						if (bytes_sent == SOCKET_ERROR)
+						if (bytes_sent == -1)
 						{
 							/*
 							wserror = WSAGetLastError();
@@ -5855,7 +5855,7 @@ int main( int argc, char * argv[] ) {
 
 						bytes_sent = send (workShip->shipSockfd, &workShip->sndbuf[workShip->sndwritten],
 							workShip->snddata - workShip->sndwritten, 0);
-						if (bytes_sent == SOCKET_ERROR)
+						if (bytes_sent == -1)
 						{
 							/*
 							wserror = WSAGetLastError();
@@ -5933,16 +5933,17 @@ void tcp_listen (int sockfd)
 	}
 }
 
-int tcp_accept (int sockfd, struct sockaddr *client_addr, int *addr_len )
+int tcp_accept (int sockfd, struct sockaddr *client_addr, int addr_len)
 {
 	int fd;
 
-	if ((fd = accept (sockfd, client_addr, addr_len)) < 0)
+	if ((fd = accept (sockfd, client_addr, (socklen_t*)&addr_len)) < 0)
 		debug_perror ("Could not accept connection");
 
 	return (fd);
 }
 
+/* Dead code. */
 int tcp_sock_connect(char* dest_addr, int port)
 {
 	int fd;
