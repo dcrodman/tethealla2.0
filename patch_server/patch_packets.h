@@ -160,8 +160,6 @@ struct file_finished_packet {
     uint32_t padding;
 };
 
-long calculate_checksum(void* data, unsigned long size);
-
 bool send_packet(patch_client *client);
 bool send_header(patch_client* client, int type);
 

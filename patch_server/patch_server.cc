@@ -44,6 +44,7 @@
 
 extern "C" {
     #include <jansson.h>
+    #include "utils.h"
 }
 
 #include "patch_server.h"

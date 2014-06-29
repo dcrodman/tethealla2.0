@@ -32,21 +32,7 @@
 
 extern "C" {
     #include "sniffex.h"
-}
-
-long calculate_checksum(void* data, unsigned long size)
-{
-    long offset,y,cs = 0xFFFFFFFF;
-    for (offset = 0; offset < (long)size; offset++)
-    {
-        cs ^= *(unsigned char*)((long)data + offset);
-        for (y = 0; y < 8; y++)
-        {
-            if (!(cs & 1)) cs = (cs >> 1) & 0x7FFFFFFF;
-            else cs = ((cs >> 1) & 0x7FFFFFFF) ^ 0xEDB88320;
-        }
-    }
-    return (cs ^ 0xFFFFFFFF);
+    #include "utils.h"
 }
 
 /* Send the packet from the client's send buffer to the client. Will try
