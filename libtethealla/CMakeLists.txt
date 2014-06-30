@@ -13,20 +13,11 @@ set(ENCRYPTION_SOURCES
     ${INCL_DR}/encryption.h
 	)
 
-set (SNIFFEX_SOURCES
-	sniffex/sniffex.c
-    ${INCL_DR}/sniffex.h
-	)
+set (SNIFFEX_SOURCES sniffex/sniffex.c ${INCL_DR}/sniffex.h)
 
-set (MD5_SOURCES 
-	md5/md5.c
-	${INCL_DR}/md5.h
-	)
+set (MD5_SOURCES md5/md5.c ${INCL_DR}/md5.h)
 
-set (UTILS_SOURCES
-	utils/utils.c
-	${INCL_DR}/utils.h
-	)
+set (UTILS_SOURCES utils/utils.c ${INCL_DR}/utils.h)
 
 # Export this directory to the parent scope so that other binaries
 # in the project can be built individually and include this library.

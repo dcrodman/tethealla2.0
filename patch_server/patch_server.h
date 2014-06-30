@@ -33,7 +33,6 @@
 
 extern "C" {
     #include "encryption.h"
-    #include "sniffex.h"
 }
 
 const int TCP_BUFFER_SIZE = 65530;

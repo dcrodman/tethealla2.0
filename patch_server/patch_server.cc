@@ -44,6 +44,7 @@
 
 extern "C" {
     #include <jansson.h>
+    #include "sniffex.h"
     #include "utils.h"
 }
 
