@@ -3,8 +3,8 @@
 		"username" : "psoadmin",
 		"password" : "psobb",
 		"host" : "localhost",
-		"port" : 80,
-		"database" : "tethealla"
+		"port" : 3306,
+		"database" : "tethealla_test"
 	},
 	"server_ip" : "127.0.0.1",
 	"server_port" : 12000,
