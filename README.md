@@ -12,12 +12,12 @@ Installation Requirements
     MySQL Server
     MySQL Connector C
 
-Each can be found at the following locations:
-CMake: http://www.cmake.org/cmake/resources/software.html
-iconv: https://www.gnu.org/software/libiconv/
-Jansson: http://www.digip.org/jansson/
-MySQL Server: http://dev.mysql.com/downloads/mysql/
-MySQL C Connector: http://dev.mysql.com/doc/connector-c/en/connector-c-installation-source.html
+Each can be found at the following locations:  
+CMake: http://www.cmake.org/cmake/resources/software.html  
+iconv: https://www.gnu.org/software/libiconv/  
+Jansson: http://www.digip.org/jansson/  
+MySQL Server: http://dev.mysql.com/downloads/mysql/  
+MySQL C Connector: http://dev.mysql.com/doc/connector-c/en/connector-c-installation-source.html  
 
 Build Instructions
 ============
