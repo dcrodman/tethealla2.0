@@ -2,8 +2,8 @@
 project(libtethealla C)
 cmake_minimum_required(VERSION 2.6)
 
-set(INCL_DR include/)
-set(ENC_DR encryption/)
+set(INCL_DR include)
+set(ENC_DR encryption)
 
 set(ENCRYPTION_SOURCES 
 	${ENC_DR}/psobb-crypt.c
@@ -22,7 +22,7 @@ set (UTILS_SOURCES utils/utils.c ${INCL_DR}/utils.h)
 # Export this directory to the parent scope so that other binaries
 # in the project can be built individually and include this library.
 set(LIBTETHEALLA_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/${INCL_DR})
-set(LIBTETHEALLA_INCLUDE_DIR ${SHARED_LIB_INCLUDE_DIR} PARENT_SCOPE)
+set(LIBTETHEALLA_INCLUDE_DIR ${LIBTETHEALLA_INCLUDE_DIR} PARENT_SCOPE)
 
 if (TARGET tethealla)
 	message("libtethealla is already defined.")
