@@ -29,6 +29,7 @@
 #include <cstdarg>
 #include <cctype>
 #include <cerrno>
+#include <random>
 
 #include <sys/time.h>
 #include <arpa/inet.h>
@@ -41,10 +42,13 @@ extern "C" {
     #include <jansson.h>
     #include "utils.h"
     #include "md5.h"
+    #include "sniffex.h"
 }
 
 #include <mysql.h>
 
+#include "login.h"
+#include "login_server.h"
 #include	"pso_crypt.h"
 #include	"bbtable.h"
 
@@ -67,7 +71,6 @@ const char *PSO_CLIENT_VER_STRING = "TethVer12510";
 
 //#define USEADDR_ANY
 #define DEBUG_OUTPUT
-#define TCP_BUFFER_SIZE 64000
 #define PACKET_BUFFER_SIZE ( TCP_BUFFER_SIZE * 16 )
 
 #define SEND_PACKET_03 0x00 // Done
@@ -81,7 +84,6 @@ const char *PSO_CLIENT_VER_STRING = "TethVer12510";
 #define SEND_PACKET_B1 0x08
 #define SEND_PACKET_A0 0x09
 #define RECEIVE_PACKET_93 0x0A
-#define MAX_SENDCHECK 0x0B
 
 #define NUM_CLASSES 12
 
@@ -101,6 +103,9 @@ const char *PSO_CLIENT_VER_STRING = "TethVer12510";
 
 const char *CFG_NAME = "login_config.json";
 const char *LOCAL_DIR = "/usr/local/share/tethealla/config/";
+
+static std::mt19937 rand_gen(time(NULL));
+static std::uniform_int_distribution<uint8_t> dist(0, 255);
 
 /* functions */
 
@@ -140,10 +145,7 @@ unsigned char Packet03[] = {
 	0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
 	0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28,
 	0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x2F, 0x30
-}; 
-
-const unsigned char Message03[] = { "Tethealla Gate v.047" };
-
+};
 
 /* Server Redirect */
 
@@ -427,45 +429,6 @@ typedef struct NO_ALIGN st_chardata {
 	unsigned char teamFlag[2048]; // 0x3198 - 0x3997
 	unsigned char teamRewards[8]; // 0x3998 - 0x39A0
 } CHARDATA;
-
-
-/* Player Structure */
-
-typedef struct st_banana {
-	int plySockfd;
-	int login;
-	unsigned char peekbuf[8];
-	unsigned char rcvbuf [TCP_BUFFER_SIZE];
-	unsigned short rcvread;
-	unsigned short expect;
-	unsigned char decryptbuf [TCP_BUFFER_SIZE];
-	unsigned char sndbuf [TCP_BUFFER_SIZE];
-	unsigned char encryptbuf [TCP_BUFFER_SIZE];
-	int snddata, 
-		sndwritten;
-	unsigned char packet [TCP_BUFFER_SIZE];
-	unsigned short packetdata;
-	unsigned short packetread;
-	int crypt_on;
-	PSO_CRYPT server_cipher, client_cipher;
-	unsigned guildcard;
-	char guildcard_string[12];
-	unsigned char guildcard_data[20000];
-	int sendingchars;
-	short slotnum;
-	unsigned lastTick;		// The last second
-	unsigned toBytesSec;	// How many bytes per second the server sends to the client
-	unsigned fromBytesSec;	// How many bytes per second the server receives from the client
-	unsigned packetsSec;	// How many packets per second the server receives from the client
-	unsigned connected;
-	unsigned char sendCheck[MAX_SENDCHECK+2];
-	int todc;
-	unsigned char IP_Address[16];
-	char hwinfo[18];
-	int isgm;
-	int dress_flag;
-	unsigned connection_index;
-} BANANA;
 
 typedef struct st_dressflag {
 	unsigned guildcard;
@@ -866,7 +829,7 @@ void construct0xA0()
 }
 
 
-
+/* Return a slot for a free connection or 0xFFFF if we're full. */
 unsigned free_connection()
 {
 	unsigned fc;
@@ -896,6 +859,8 @@ unsigned free_shipconnection()
 }
 
 
+/* "Reset" might be more accurate for this, but disconnect a client if they
+ are connected and set all values of the connection to indicate that it's available. */
 void initialize_connection (BANANA* connect)
 {
 	unsigned ch, ch2;
@@ -990,21 +955,21 @@ void start_encryption(BANANA* connect)
 			initialize_connection (workConnect);
 		}
 	}
+    uint8_t server_seed[48];
+    uint8_t client_seed[48];
+    for (int i = 0; i < 48; i++) {
+        server_seed[i] = dist(rand_gen);
+        client_seed[i] = dist(rand_gen);
+    }
+    CRYPT_CreateKeys(&connect->server_cipher, server_seed, CRYPT_BLUEBURST);
+    CRYPT_CreateKeys(&connect->client_cipher, client_seed, CRYPT_BLUEBURST);
 
-	memcpy (&connect->sndbuf[0], &Packet03[0], sizeof (Packet03));
-	for (c=0;c<0x30;c++)
-	{
-		connect->sndbuf[0x68+c] = (unsigned char) rand() % 255;
-		connect->sndbuf[0x98+c] = (unsigned char) rand() % 255;
-	}
-	connect->snddata += sizeof (Packet03);
-	cipher_ptr = &connect->server_cipher;
-	pso_crypt_table_init_bb (cipher_ptr, &connect->sndbuf[0x68]);
-	cipher_ptr = &connect->client_cipher;
-	pso_crypt_table_init_bb (cipher_ptr, &connect->sndbuf[0x98]);
+    send_bb_login_welcome(connect, server_seed, client_seed);
+    connect->connected = (unsigned) servertime;
+
+    // TODO: Can these be ditched?
 	connect->crypt_on = 1;
 	connect->sendCheck[SEND_PACKET_03] = 1;
-	connect->connected = (unsigned) servertime;
 }
 
 void SendB1 (BANANA* client) {
@@ -1023,7 +988,7 @@ void SendB1 (BANANA* client) {
                 cooked.tm_mon + 1, cooked.tm_mday, cooked.tm_hour, cooked.tm_min,
                 cooked.tm_sec, rawtime.tv_usec / 1000);
 
-		cipher_ptr = &client->server_cipher;
+		//cipher_ptr = &client->server_cipher;
 		encryptcopy (client, &client->encryptbuf[0], 0x24 );
 	}
 	else
@@ -1049,7 +1014,7 @@ void Send1A (const char *mes, BANANA* client)
 	while (x1A_Len % 8)
 		Packet1AData[x1A_Len++] = 0x00;
 	*(unsigned short*) &Packet1AData[0] = x1A_Len;
-	cipher_ptr = &client->server_cipher;
+	//cipher_ptr = &client->server_cipher;
 	encryptcopy (client, (const unsigned char*)&Packet1AData[0], x1A_Len);
 	client->todc = 1;
 }
@@ -1058,7 +1023,7 @@ void SendA0 (BANANA* client)
 {
 	if ((client->guildcard) && (client->slotnum != -1))
 	{
-		cipher_ptr = &client->server_cipher;
+		//cipher_ptr = &client->server_cipher;
 		encryptcopy (client, &PacketA0Data[0], *(unsigned short*) &PacketA0Data[0]);
 	}
 	else
@@ -1087,7 +1052,7 @@ void SendEE (const char *mes, BANANA* client)
 		while (xEE_Len % 8)
 			PacketEEData[xEE_Len++] = 0x00;
 		*(unsigned short*) &PacketEEData[0] = xEE_Len;
-		cipher_ptr = &client->server_cipher;
+		//cipher_ptr = &client->server_cipher;
 		encryptcopy (client, (const unsigned char*)&PacketEEData[0], xEE_Len);
 	}
 }
@@ -1100,7 +1065,7 @@ void Send19 (unsigned char ip1, unsigned char ip2, unsigned char ip3, unsigned c
 	client->encryptbuf[0x0A] = ip3;
 	client->encryptbuf[0x0B] = ip4;
 	*(unsigned short*) &client->encryptbuf[0x0C] = ipp;
-	cipher_ptr = &client->server_cipher;
+	//cipher_ptr = &client->server_cipher;
 	encryptcopy (client, &client->encryptbuf[0], sizeof (Packet19));
 }
 
@@ -1148,7 +1113,7 @@ void SendE2 (BANANA* client)
 		}
 
 		memset (&PacketE2Data[0xAF4], 0xFF, 4); // Enable dressing room, etc,.
-		cipher_ptr = &client->server_cipher;
+		//cipher_ptr = &client->server_cipher;
 		encryptcopy (client, &PacketE2Data[0], sizeof (PacketE2Data));
 		client->sendCheck[SEND_PACKET_E2] = 0x01;
 	}
@@ -1491,7 +1456,7 @@ void AckCharacter_Creation(unsigned char slotnum, BANANA* client)
 			PacketE4[0x03] = 0x00;
 			PacketE4[0x08] = slotnum;
 			PacketE4[0x0C] = 0x00;
-			cipher_ptr = &client->server_cipher;
+			//cipher_ptr = &client->server_cipher;
 			encryptcopy (client, &PacketE4[0], sizeof (PacketE4));
 			sprintf (&myQuery[0], "UPDATE security_data SET slotnum = '%u' WHERE guildcard = '%u'", slotnum, client->guildcard );
 			if ( mysql_query ( myData, &myQuery[0] ) )
@@ -1564,7 +1529,7 @@ void SendE4_E5(unsigned char slotnum, unsigned char selecting, BANANA* client)
 				PacketE5[0x0C] = 0x00;
 				if (client->sendCheck[SEND_PACKET_E5] < 0x04)
 				{
-					cipher_ptr = &client->server_cipher;
+					//cipher_ptr = &client->server_cipher;
 					encryptcopy (client, &PacketE5[0], sizeof (PacketE5));
 					client->sendCheck[SEND_PACKET_E5] ++;
 				}
@@ -1580,7 +1545,7 @@ void SendE4_E5(unsigned char slotnum, unsigned char selecting, BANANA* client)
 				PacketE4[0x0C] = 0x02;
 				if (client->sendCheck[SEND_PACKET_E4] < 0x04)
 				{
-					cipher_ptr = &client->server_cipher;
+					//cipher_ptr = &client->server_cipher;
 					encryptcopy (client, &PacketE4[0], sizeof (PacketE4));
 					client->sendCheck[SEND_PACKET_E4]++;
 				}
@@ -1599,7 +1564,7 @@ void SendE4_E5(unsigned char slotnum, unsigned char selecting, BANANA* client)
 				PacketE4[0x0C] = 0x01;
 				if ((client->sendCheck[SEND_PACKET_E4] < 0x04) && (client->sendingchars == 0))
 				{
-					cipher_ptr = &client->server_cipher;
+					//cipher_ptr = &client->server_cipher;
 					encryptcopy (client, &PacketE4[0], sizeof (PacketE4));
 
 					sprintf (&myQuery[0], "UPDATE security_data SET slotnum = '%u' WHERE guildcard = '%u'", slotnum, client->guildcard );
@@ -1626,7 +1591,7 @@ void SendE8 (BANANA* client)
 {
 	if ((client->guildcard) && (!client->sendCheck[SEND_PACKET_E8]))
 	{
-		cipher_ptr = &client->server_cipher;
+		//cipher_ptr = &client->server_cipher;
 		encryptcopy (client, &PacketE8[0], sizeof (PacketE8));
 		client->sendCheck[SEND_PACKET_E8] = 1;
 	}
@@ -1644,11 +1609,11 @@ void SendEB (unsigned char subCommand, unsigned char EBOffset, BANANA* client)
 		switch (subCommand)
 		{
 		case 0x01:
-			cipher_ptr = &client->server_cipher;
+			//cipher_ptr = &client->server_cipher;
 			encryptcopy (client, &PacketEB01[0], PacketEB01_Total);
 			break;
 		case 0x02:
-			cipher_ptr = &client->server_cipher;
+			//cipher_ptr = &client->server_cipher;
 			CalcOffset = (unsigned) EBOffset * 26636;
 			if (CalcOffset < PacketEB02_Total)
 			{
@@ -1743,7 +1708,7 @@ void SendDC (int sendChecksum, unsigned char PacketNum, BANANA* client)
 			PacketDC01[0x0C] = 0x90;
 			PacketDC01[0x0D] = 0xD5;
 			*(unsigned *) &PacketDC01[0x10] = GCChecksum;
-			cipher_ptr = &client->server_cipher;
+			//cipher_ptr = &client->server_cipher;
 			encryptcopy (client, &PacketDC01[0], sizeof (PacketDC01));
 		}
 		else
@@ -1763,7 +1728,7 @@ void SendDC (int sendChecksum, unsigned char PacketNum, BANANA* client)
 				PacketDC02[0x0C] = PacketNum;
 				memcpy (&client->encryptbuf[0x00], &PacketDC02[0], 0x10);
 				memcpy (&client->encryptbuf[0x10], &PacketDC_Check[CalcOffset], to_send);
-				cipher_ptr = &client->server_cipher;
+				//cipher_ptr = &client->server_cipher;
 				encryptcopy (client, &client->encryptbuf[0x00], to_send);
 			}
 		}
@@ -3524,7 +3489,7 @@ void CharacterProcessPacket (BANANA* client)
 
 				}
 				*(unsigned *) &client->encryptbuf[0x14] = security_thirtytwo_check;
-				cipher_ptr = &client->server_cipher;
+				//cipher_ptr = &client->server_cipher;
 				encryptcopy (client, &client->encryptbuf[0], sizeof (PacketE6));
 				if (client->slotnum != -1)
 				{
@@ -3675,6 +3640,7 @@ void LoginProcessPacket (BANANA* client)
 
 
 	/* Only packet we're expecting during the login is 0x93 and 0x05. */
+    printf("LoginProcessPacket: %d\n", client->decryptbuf[0x02]);
 
 	switch (client->decryptbuf[0x02])
 	{
@@ -3801,7 +3767,7 @@ void LoginProcessPacket (BANANA* client)
 					return;
 				}
 
-				cipher_ptr = &client->server_cipher;
+				//cipher_ptr = &client->server_cipher;
 				encryptcopy (client, &client->encryptbuf[0], sizeof (PacketE6));
 
 				Send19 (serverIPN[0], serverIPN[1], serverIPN[2], serverIPN[3], serverPort+1, client );
@@ -4348,24 +4314,28 @@ int main( int argc, char * argv[] ) {
 
 		servertime = time(NULL);
 
-		/* Clear socket activity flags. */
-
 		FD_ZERO (&ReadFDs);
 		FD_ZERO (&WriteFDs);
 		FD_ZERO (&ExceptFDs);
 
+        // Iterate over all of oure connections (even those that aren't connected...)
 		for (ch=0;ch<serverNumConnections;ch++)
 		{
+            // Connection's spot on the list?
 			connectNum = serverConnectionList[ch];
+            // workConnect = the client we're currently working with (BANANA*)
 			workConnect = connections[connectNum];
 
-			if (workConnect->plySockfd >= 0) 
+            // If we have an active connection (it's set to -1 otherwise)
+			if (workConnect->plySockfd >= 0)
 			{
+                // Do we have packet data? (Q: Where is this assigned?)
 				if (workConnect->packetdata)
 				{
 					this_packet = *(unsigned short*) &workConnect->packet[workConnect->packetread];
 					memcpy (&workConnect->decryptbuf[0], &workConnect->packet[workConnect->packetread], this_packet);
 
+                    // Transfer off to the handler for whichever the sever the client is connected.
 					switch (workConnect->login)
 					{
 					case 0x01:
@@ -4381,17 +4351,17 @@ int main( int argc, char * argv[] ) {
 					if (workConnect->packetread == workConnect->packetdata)
 						workConnect->packetread = workConnect->packetdata = 0;
 				}
-
+                // Q: How does this work?
 				if (workConnect->lastTick != (unsigned) servertime)
 				{
 					if (workConnect->lastTick > (unsigned) servertime)
 						ch2 = 1;
 					else
 						ch2 = 1 + ((unsigned) servertime - workConnect->lastTick);
-						workConnect->lastTick = (unsigned) servertime;
-						workConnect->packetsSec /= ch2;
-						workConnect->toBytesSec /= ch2;
-						workConnect->fromBytesSec /= ch2;
+                    workConnect->lastTick = (unsigned) servertime;
+                    workConnect->packetsSec /= ch2;
+                    workConnect->toBytesSec /= ch2;
+                    workConnect->fromBytesSec /= ch2;
 				}
 
 				/*
@@ -4403,10 +4373,13 @@ int main( int argc, char * argv[] ) {
 					}
 					*/
 
+                // Add client to read/except fds.
 				FD_SET (workConnect->plySockfd, &ReadFDs);
 				nfds = max (nfds, workConnect->plySockfd);
 				FD_SET (workConnect->plySockfd, &ExceptFDs);
 				nfds = max (nfds, workConnect->plySockfd);
+
+                // If we have data to send the client, add them to writefds.
 				if (workConnect->snddata - workConnect->sndwritten)
 				{
 					FD_SET (workConnect->plySockfd, &WriteFDs);
@@ -4415,6 +4388,7 @@ int main( int argc, char * argv[] ) {
 			}
 		}
 
+        // Iterate over our connected ships.
 		for (ch=0;ch<serverNumShips;ch++)
 		{
 			shipNum = serverShipList[ch];
@@ -4470,6 +4444,7 @@ int main( int argc, char * argv[] ) {
 			}
 		}
 
+        // Add our always-listening ports to listen for connections.
 		FD_SET (login_sockfd, &ReadFDs);
 		nfds = max (nfds, login_sockfd);
 		FD_SET (character_sockfd, &ReadFDs);
@@ -4554,31 +4529,35 @@ int main( int argc, char * argv[] ) {
 				{
 					if (FD_ISSET(workConnect->plySockfd, &ReadFDs))
 					{
-						// Read shit.
 						if ( ( pkt_len = recv (workConnect->plySockfd, &tmprcv[0], TCP_BUFFER_SIZE - 1, 0) ) <= 0 )
-						{
-							/*
-							wserror = WSAGetLastError();
+                        {
 							printf ("Could not read data from client...\n");
-							printf ("Socket Error %u.\n", wserror );
-							*/
 							initialize_connection (workConnect);
 						}
 						else
 						{
+                            // Increment our bytes per second by however much we just got.
 							workConnect->fromBytesSec += (unsigned) pkt_len;
+
 							// Work with it.
 							for (pkt_c=0;pkt_c<pkt_len;pkt_c++)
 							{
+                                // Copy each byte from tmprcv into our recv buffer.
 								workConnect->rcvbuf[workConnect->rcvread++] = tmprcv[pkt_c];
 
 								if (workConnect->rcvread == 8)
 								{
 									/* Decrypt the packet header after receiving 8 bytes. */
 
-									cipher_ptr = &workConnect->client_cipher;
+									//cipher_ptr = &workConnect->client_cipher;
 
-									decryptcopy ( &workConnect->peekbuf[0], &workConnect->rcvbuf[0], 8 );
+                                    memcpy(&workConnect->peekbuf, &workConnect->rcvbuf, 8);
+                                    CRYPT_CryptData(&workConnect->client_cipher, &workConnect->peekbuf, 8, 0);
+
+                                    printf("Header\n");
+                                    print_payload(workConnect->peekbuf, 8);
+                                    printf("\n");
+									//decryptcopy ( &workConnect->peekbuf[0], &workConnect->rcvbuf[0], 8 );
 
 									/* Make sure we're expecting a multiple of 8 bytes. */
 
@@ -4594,8 +4573,10 @@ int main( int argc, char * argv[] ) {
 									}
 								}
 
+                                // Have we read the rest of the packet?
 								if ( ( workConnect->rcvread == workConnect->expect ) && ( workConnect->expect != 0 ) )
 								{
+                                    // Q: Why?
 									if ( workConnect->packetdata + workConnect->expect > TCP_BUFFER_SIZE )
 									{
 										initialize_connection ( workConnect );
@@ -4605,16 +4586,20 @@ int main( int argc, char * argv[] ) {
 									{
 										/* Decrypt the rest of the data if needed. */
 
-										cipher_ptr = &workConnect->client_cipher;
-
+										//cipher_ptr = &workConnect->client_cipher;
 										*(long long*) &workConnect->packet[workConnect->packetdata] = *(long long*) &workConnect->peekbuf[0];
 
 										if ( workConnect->rcvread > 8 )
 											decryptcopy ( &workConnect->packet[workConnect->packetdata + 8], &workConnect->rcvbuf[8], workConnect->expect - 8 );
 
+                                        printf("Received packet:\n");
+                                        print_payload(workConnect->rcvbuf, workConnect->expect);
+
+                                        // Assign packetdata so that the loop above will pass it off to the correct handler.
 										this_packet = *(unsigned short*) &workConnect->peekbuf[0];
 										workConnect->packetdata += this_packet;
 
+                                        // Keeping track of how many packets we're getting per second
 										workConnect->packetsSec ++;
 
 										if ((workConnect->packetsSec   > 40)    ||
@@ -4635,21 +4620,19 @@ int main( int argc, char * argv[] ) {
 
 					if (FD_ISSET(workConnect->plySockfd, &WriteFDs))
 					{
-						// Write shit.
+						// We should only get here if we know that we have data to send.
+
+                        printf("Sending packet\n");
+                        print_payload(&workConnect->sndbuf[workConnect->sndwritten],workConnect->snddata-workConnect->sndwritten);
 
 						bytes_sent = send (workConnect->plySockfd, &workConnect->sndbuf[workConnect->sndwritten],
 							workConnect->snddata - workConnect->sndwritten, 0);
-						if (bytes_sent == -1)
-						{
-							/*
-							wserror = WSAGetLastError();
+						if (bytes_sent == -1) {
 							printf ("Could not send data to client...\n");
-							printf ("Socket Error %u.\n", wserror );
-							*/
 							initialize_connection (workConnect);							
 						}
-						else
-						{
+						else {
+                            // Move up our sndwritten
 							workConnect->sndwritten += bytes_sent;
 							workConnect->toBytesSec += (unsigned) bytes_sent;
 						}
@@ -4658,6 +4641,7 @@ int main( int argc, char * argv[] ) {
 							workConnect->sndwritten = workConnect->snddata = 0;
 					}
 
+                    // Send out whatever remaining data we had to the client and then d/c them.
 					if (workConnect->todc)
 					{
 						if ( workConnect->snddata - workConnect->sndwritten )
