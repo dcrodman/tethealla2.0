@@ -103,8 +103,8 @@ const char *LOCAL_DIR = "/usr/local/share/tethealla/config/";
 
 void send_to_server(int sock, char* packet);
 int receive_from_server(int sock, char* packet);
-void debug(char *fmt, ...);
-void debug_perror(char * msg);
+void debug(const char *fmt, ...);
+void debug_perror(const char * msg);
 void tcp_listen (int sockfd);
 int tcp_accept (int sockfd, struct sockaddr *client_addr, int addr_len);
 int tcp_sock_connect(char* dest_addr, int port);
@@ -639,6 +639,17 @@ int ds_found, new_record, free_record;
 
 #endif
 
+BANANA * connections[LOGIN_COMPILED_MAX_CONNECTIONS];
+ORANGE * ships[SHIP_COMPILED_MAX_CONNECTIONS];
+BANANA * workConnect;
+ORANGE * workShip;
+
+unsigned char PacketA0Data[0x4000] = {0};
+unsigned short PacketA0Size = 0;
+const char serverName[] = { "T\0E\0T\0H\0E\0A\0L\0L\0A\0" };
+
+const char NoShips[] = "No ships!";
+
 BANK empty_bank;
 
 /* encryption stuff */
@@ -717,67 +728,6 @@ void MDString (char *inString, char *outString) {
   }
 }
 
-void convertIPString (char* IPData, unsigned IPLen, int fromConfig )
-{
-	unsigned p,p2,p3;
-	char convert_buffer[5];
-
-	p2 = 0;
-	p3 = 0;
-	for (p=0;p<IPLen;p++)
-	{
-		if ((IPData[p] > 0x20) && (IPData[p] != 46))
-			convert_buffer[p3++] = IPData[p]; else
-		{
-			convert_buffer[p3] = 0;
-			if (IPData[p] == 46) // .
-			{
-				serverIP[p2] = atoi (&convert_buffer[0]);
-				p2++;
-				p3 = 0;
-				if (p2>3)
-				{
-					if (fromConfig)
-						printf ("tethealla.ini is corrupted. (Failed to read IP information from file!)\n"); else
-						printf ("Failed to determine IP address.\n");
-					printf ("Hit [ENTER]");
-					//gets (&dp[0]);
-					exit (1);
-				}
-			}
-			else
-			{
-				serverIP[p2] = atoi (&convert_buffer[0]);
-				if (p2 != 3)
-				{
-					if (fromConfig)
-						printf ("tethealla.ini is corrupted. (Failed to read IP information from file!)\n"); else
-						printf ("Failed to determine IP address.\n");
-					printf ("Hit [ENTER]");
-					//gets (&dp[0]);
-					exit (1);
-				}
-				break;
-			}
-		}
-	}
-}
-
-long CalculateChecksum(void* data,unsigned long size)
-{
-    long offset,y,cs = 0xFFFFFFFF;
-    for (offset = 0; offset < (long)size; offset++)
-    {
-        cs ^= *(unsigned char*)((long)data + offset);
-        for (y = 0; y < 8; y++)
-        {
-            if (!(cs & 1)) cs = (cs >> 1) & 0x7FFFFFFF;
-            else cs = ((cs >> 1) & 0x7FFFFFFF) ^ 0xEDB88320;
-        }
-    }
-    return (cs ^ 0xFFFFFFFF);
-}
-
 unsigned char EBBuffer [0x10000];
 
 void construct0xEB()
@@ -821,7 +771,7 @@ void construct0xEB()
 		EBSize = ftell (fpb);
 		fseek (fpb, 0, SEEK_SET);
 		fread (&EBBuffer[0], 1, EBSize, fpb);
-		EBChecksum = (unsigned) CalculateChecksum(&EBBuffer[0], EBSize);
+		EBChecksum = (unsigned) calculate_checksum(&EBBuffer[0], EBSize);
 		*(unsigned *) &PacketEB01[ch3] = EBSize;
 		ch3 += 4;
 		*(unsigned *) &PacketEB01[ch3] = EBChecksum;
@@ -954,17 +904,6 @@ int load_config() {
 
     return 0;
 }
-
-BANANA * connections[LOGIN_COMPILED_MAX_CONNECTIONS];
-ORANGE * ships[SHIP_COMPILED_MAX_CONNECTIONS];
-BANANA * workConnect;
-ORANGE * workShip;
-
-unsigned char PacketA0Data[0x4000] = {0};
-unsigned short PacketA0Size = 0;
-const char serverName[] = { "T\0E\0T\0H\0E\0A\0L\0L\0A\0" };
-
-const char NoShips[] = "No ships!";
 
 void construct0xA0()
 {
@@ -2107,7 +2046,7 @@ void SendDC (int sendChecksum, unsigned char PacketNum, BANANA* client)
 				PacketDC_Check[ch] = 0x00;
 			PacketDC_Check[0x06] = 0x01;
 			PacketDC_Check[0x07] = 0x02;
-			GCChecksum = (unsigned) CalculateChecksum (&PacketDC_Check[0], 54672);
+			GCChecksum = (unsigned) calculate_checksum (&PacketDC_Check[0], 54672);
 			PacketDC01[0x00] = 0x14;
 			PacketDC01[0x02] = 0xDC;
 			PacketDC01[0x03] = 0x01;
