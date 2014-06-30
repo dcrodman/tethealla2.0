@@ -80,6 +80,8 @@ const char *PSO_CLIENT_VER_STRING = "TethVer12510";
 #define RECEIVE_PACKET_93 0x0A
 #define MAX_SENDCHECK 0x0B
 
+#define NUM_CLASSES 12
+
 #define CLASS_HUMAR 0x00
 #define CLASS_HUNEWEARL 0x01
 #define CLASS_HUCAST 0x02
@@ -208,10 +210,10 @@ unsigned char PacketE2Data[2808] = { 0 };
 
 /* Populated by load_config_file(): */
 
-char mySQL_Host[255] = {0};
-char mySQL_Username[255] = {0};
-char mySQL_Password[255] = {0};
-char mySQL_Database[255] = {0};
+char *mySQL_Host;
+char *mySQL_Username;
+char *mySQL_Password;
+char *mySQL_Database;
 unsigned int mySQL_Port;
 unsigned char serverIP[4];
 unsigned short serverPort;
@@ -918,11 +920,11 @@ int load_config() {
             "{s:{s:s, s:s, s:s, s:i, s:s}, s:s, s:i, s:s, s:i, s:i, "
             "s:{s:i, s:i, s:i, s:i, s:i, s:i, s:i, s:i}, s:s, s:s, s:s}",
             "mysql",
-            "username", &mySQL_Username[0],
-            "password", &mySQL_Password[0],
-            "host", &mySQL_Host[0],
+            "username", &mySQL_Username,
+            "password", &mySQL_Password,
+            "host", &mySQL_Host,
             "port", &mySQL_Port,
-            "database", &mySQL_Database[0],
+            "database", &mySQL_Database,
             "server_ip", &serverIP,
             "server_port", &serverPort,
             "welcome_message", &Welcome_Message[0],
@@ -941,15 +943,15 @@ int load_config() {
             "local_gm_color", &local_color,
             "normal_color", &normal_color
     );
+    if (result == -1) {
+        json_error(&error);
+        return -1;
+    }
 
     globalName = atoi(global_color);
     localName = atoi(global_color);
     normalName = atoi(normal_color);
 
-    if (result == -1) {
-        json_error(&error);
-        return -1;
-    }
     return 0;
 }
 
@@ -1366,7 +1368,7 @@ unsigned StringLength (const char* src)
 CHARDATA E7_Base, E7_Work;
 unsigned char chardata[0x200];
 unsigned char E7chardata[(sizeof(CHARDATA)*2)+100];
-unsigned char startingStats[12*14];
+unsigned char startingStats[NUM_CLASSES*14];
 unsigned char DefaultTeamFlagSlashes[4098];
 unsigned char DefaultTeamFlag[2048];
 unsigned char FlagSlashes[4098];
@@ -1571,7 +1573,7 @@ void AckCharacter_Creation(unsigned char slotnum, BANANA* client)
 				NewE7->inventory[ch].item.data[1] = 0xFF;
 				NewE7->inventory[ch].item.itemid = 0xFFFFFFFF;
 			}
-
+            // Q: Why 14 and not 16 if the stats are 2 bytes each and there are 8 stats?
 			memcpy (&NewE7->ATP, &startingStats[clientchar->_class * 14], 14);
 			*(long long*) &NewE7->unknown = *(long long*) &E7Base->unknown;
 			//NewE7->level = 0x00;
@@ -5084,13 +5086,13 @@ void LoadDropData()
 					switch (ch)
 					{
 					case 0x01:
-						strcat (&id_file[0], "drop\\ep1_mob_");
+						strcat (&id_file[0], "drop/ep1_mob_");
 						break;
 					case 0x02:
-						strcat (&id_file[0], "drop\\ep2_mob_");
+						strcat (&id_file[0], "drop/ep2_mob_");
 						break;
 					case 0x04:
-						strcat (&id_file[0], "drop\\ep4_mob_");
+						strcat (&id_file[0], "drop/ep4_mob_");
 						break;
 					}
                     sprintf(&convert_ch[0], "%d", d);
@@ -5218,8 +5220,6 @@ int main( int argc, char * argv[] ) {
     };
 
 	FILE* fp;
-	//int wserror;
-	unsigned char MDBuffer[17] = {0};
 	unsigned connectNum, shipNum;
 
 	dp[0] = 0;
@@ -5241,7 +5241,7 @@ int main( int argc, char * argv[] ) {
 
 	printf ("Loading configuration from %s...", CFG_NAME);
 	load_config();
-	printf ("  OK!\n");
+	printf ("OK!\n");
 
 	/* Set this up for later. */
 
@@ -5250,8 +5250,10 @@ int main( int argc, char * argv[] ) {
 	for (ch=0;ch<200;ch++)
 		empty_bank.bankInventory[ch].itemid = 0xFFFFFFFF;
 
+    chdir("/usr/local/share/tethealla/login");
+
 	printf ("Loading PlyLevelTbl.bin ...");
-	fp = fopen ( "PlyLevelTbl.bin", "rb" );
+	fp = fopen ("PlyLevelTbl.bin", "rb" );
 	if (!fp)
 	{
 		printf ("Can't proceed without plyleveltbl.bin!\n");
@@ -5259,8 +5261,10 @@ int main( int argc, char * argv[] ) {
 		gets (&dp[0]);
 		exit (1);
 	}
-	fread ( &startingStats[0], 1, 12*14, fp );
+    // Q: Is 14 the size of an entry?
+	fread ( &startingStats[0], 1, NUM_CLASSES*14, fp );
 	fclose ( fp );
+
 	printf (" OK!\n");
 	printf ("Loading 0xE2 base packet ...");
 	fp = fopen ( "e2base.bin", "rb" );
