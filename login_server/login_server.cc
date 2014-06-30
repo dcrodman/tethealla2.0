@@ -240,14 +240,11 @@ unsigned mob_rate[8]; // rare appearance rate
 char Welcome_Message[255] = {0};
 time_t servertime;
 
-#ifndef NO_SQL
-
 MYSQL * myData;
 char myQuery[0x10000] = {0};
 MYSQL_ROW myRow ;
 MYSQL_RES * myResult;
 
-#endif
 
 #define NO_ALIGN __declspec(align(1))
 
@@ -525,119 +522,6 @@ unsigned PacketEB01_Total;
 unsigned PacketEB02_Total;
 
 unsigned keys_in_use [SHIP_COMPILED_MAX_CONNECTIONS+1] = { 0 };
-
-#ifdef NO_SQL
-
-typedef struct st_bank_file {
-	unsigned guildcard;
-	BANK common_bank;
-} L_BANK_DATA;
-
-typedef struct st_account {
-	char username[18];
-	char password[33];
-	char email[255];
-	unsigned regtime;
-	char lastip[16];
-	long long lasthwinfo;
-	unsigned guildcard;
-	int isgm;
-	int isbanned;
-	int islogged;
-	int isactive;
-	int teamid;
-	int privlevel;
-	unsigned char lastchar[24];
-} L_ACCOUNT_DATA;
-
-
-typedef struct st_character {
-	unsigned guildcard;
-	int slot;
-	CHARDATA data;
-	MINICHAR header;
-} L_CHARACTER_DATA;
-
-
-typedef struct st_guild {
-	unsigned accountid;
-	unsigned friendid;
-	char friendname[24];
-	char friendtext[176];
-	unsigned short reserved;
-	unsigned short sectionid;
-	unsigned short pclass;
-	unsigned short comment[45];
-	int priority;	
-} L_GUILD_DATA;
-
-
-typedef struct st_hwbans {
-	unsigned guildcard;
-	long long hwinfo;
-} L_HW_BANS;
-
-
-typedef struct st_ipbans {
-	unsigned char ipinfo;
-} L_IP_BANS;
-
-
-typedef struct st_key_data {
-	unsigned guildcard;
-	unsigned char controls[420];
-} L_KEY_DATA;
-
-
-typedef struct st_security_data {
-	unsigned guildcard;
-	unsigned thirtytwo;
-	long long sixtyfour;
-	int slotnum;
-	int isgm;
-} L_SECURITY_DATA;
-
-
-typedef struct st_ship_data {
-	unsigned char rc4key[128];
-	unsigned idx;
-} L_SHIP_DATA;
-
-
-typedef struct st_team_data {
-	unsigned short name[12];
-	unsigned owner;
-	unsigned char flag[2048];
-	unsigned teamid;
-} L_TEAM_DATA;
-
-// Oh brother :D
-
-L_BANK_DATA *bank_data[MAX_ACCOUNTS];
-L_ACCOUNT_DATA *account_data[MAX_ACCOUNTS];
-L_CHARACTER_DATA *character_data[MAX_ACCOUNTS*4];
-L_GUILD_DATA *guild_data[MAX_ACCOUNTS*40];
-L_HW_BANS *hw_bans[MAX_ACCOUNTS];
-L_IP_BANS *ip_bans[MAX_ACCOUNTS];
-L_KEY_DATA *key_data[MAX_ACCOUNTS];
-L_SECURITY_DATA *security_data[MAX_ACCOUNTS];
-L_SHIP_DATA *ship_data[SHIP_COMPILED_MAX_CONNECTIONS];
-L_TEAM_DATA *team_data[MAX_ACCOUNTS];
-
-unsigned num_accounts = 0;
-unsigned num_characters = 0;
-unsigned num_guilds = 0;
-unsigned num_hwbans = 0;
-unsigned num_ipbans = 0;
-unsigned num_keydata = 0;
-unsigned num_bankdata = 0;
-unsigned num_security = 0;
-unsigned num_shipkeys = 0;
-unsigned num_teams = 0;
-unsigned ds,ds2;
-int ds_found, new_record, free_record;
-
-#endif
 
 BANANA * connections[LOGIN_COMPILED_MAX_CONNECTIONS];
 ORANGE * ships[SHIP_COMPILED_MAX_CONNECTIONS];
@@ -1224,31 +1108,6 @@ void SendE2 (BANANA* client)
 	if ((client->guildcard) && (!client->sendCheck[SEND_PACKET_E2]))
 	{
 		memcpy (&PacketE2Data[0], &E2_Base[0], 2808);
-
-#ifdef NO_SQL
-
-		ds_found = -1;
-		for (ds=0;ds<num_keydata;ds++)
-		{
-			if (key_data[ds]->guildcard == client->guildcard)
-			{
-				ds_found = ds;
-				break;
-			}
-		}
-		if (ds_found != -1)
-			memcpy (&PacketE2Data[0x11C], &key_data[ds_found]->controls, 420 );
-		else
-		{
-			key_data[num_keydata] = (st_key_data*) malloc (sizeof(L_KEY_DATA));
-			key_data[num_keydata]->guildcard = client->guildcard;
-			memcpy (&key_data[num_keydata]->controls, &E2_Base[0x11C], 420);
-			UpdateDataFile ("keydata.dat", num_keydata, key_data[num_keydata], sizeof(L_KEY_DATA), 1);
-			num_keydata++;
-		}
-
-#else
-
 		sprintf (&myQuery[0], "SELECT * from key_data WHERE guildcard='%u'", client->guildcard );
 
 		//printf ("MySQL query %s\n", myQuery );
@@ -1282,7 +1141,7 @@ void SendE2 (BANANA* client)
 			client->todc = 1;
 			return;
 		}
-#endif
+
 		memset (&PacketE2Data[0xAF4], 0xFF, 4); // Enable dressing room, etc,.
 		cipher_ptr = &client->server_cipher;
 		encryptcopy (client, &PacketE2Data[0], sizeof (PacketE2Data));
@@ -1315,9 +1174,7 @@ unsigned char FlagSlashes[4098];
 void AckCharacter_Creation(unsigned char slotnum, BANANA* client)
 {
 	unsigned short *n;
-#ifndef NO_SQL
 	int char_exists;
-#endif
 	unsigned short packetSize;
 	MINICHAR* clientchar;
 	CHARDATA* E7Base;
@@ -1397,13 +1254,7 @@ void AckCharacter_Creation(unsigned char slotnum, BANANA* client)
 
 		if ( client->dress_flag == 0 )
 		{
-			/* Yeah!  MySQL! :D */
-
-#ifndef NO_SQL
-
 			mysql_real_escape_string ( myData, (char*)&chardata[0], (const char*)&client->decryptbuf[0x10], 0x78 );
-
-#endif
 
 			/* Let's construct the FULL character now... */
 
@@ -1579,97 +1430,11 @@ void AckCharacter_Creation(unsigned char slotnum, BANANA* client)
 			memcpy (&NewE7->keyConfigGlobal, &E7Base->keyConfigGlobal, 364);
 			memcpy (&NewE7->joyConfigGlobal, &E7Base->joyConfigGlobal, 56);
 			memcpy (&NewE7->guildCard2, &E7Base->guildCard2, 2108);
-
-#ifndef NO_SQL
 			
 			mysql_real_escape_string ( myData, (char*)&E7chardata[0], (const char*) NewE7, sizeof (CHARDATA) );
-
-#endif
-
 		}
 
 		// Check to see if the character exists in that slot.
-
-#ifdef NO_SQL
-
-		ds_found = -1;
-		free_record = -1;
-
-		for (ds=0;ds<num_characters;ds++)
-		{
-			if (character_data[ds]->guildcard == 0)
-				free_record = ds;
-
-			if ((character_data[ds]->guildcard == client->guildcard) &&
-				(character_data[ds]->slot == slotnum))
-			{
-				ds_found = ds;
-				break;
-			}
-		}
-
-		if ( ( client->dress_flag ) && ( ds_found != -1 ) )
-		{
-			debug ("Update character %u", client->guildcard);
-			NewE7 = &E7_Work;
-			memcpy (NewE7, &character_data[ds_found]->data, sizeof (CHARDATA) );
-			memcpy (&NewE7->gcString[0], &clientchar->gcString[0], 0x68);
-			*(long long*) &clientchar->unknown5[0] = *(long long*) &NewE7->unknown6[0];
-			//NewE7->playTime = 0;
-			memcpy (&character_data[ds_found]->header, &client->decryptbuf[0x10], 0x78);
-			memcpy (&character_data[ds_found]->data, NewE7, sizeof (CHARDATA));
-			UpdateDataFile ("character.dat", ds_found, character_data[ds_found], sizeof(L_CHARACTER_DATA), 0);
-		}
-		else
-		{
-			if (ds_found == -1)
-			{
-				if (free_record != -1)
-				{
-					ds_found = free_record;
-					new_record = 0;
-				}
-				else
-				{
-					ds_found = num_characters;
-					new_record = 1;
-					character_data[num_characters++] = (st_character*) malloc (sizeof(L_CHARACTER_DATA));
-				}
-			}
-			else
-				new_record = 0;
-			character_data[ds_found]->guildcard = client->guildcard;
-			character_data[ds_found]->slot = slotnum;
-			memcpy (&character_data[ds_found]->data, NewE7, sizeof (CHARDATA));
-			memcpy (&character_data[ds_found]->header, &client->decryptbuf[0x10], 0x78);
-			UpdateDataFile ("character.dat", ds_found, character_data[ds_found], sizeof(L_CHARACTER_DATA), new_record);
-		}
-		PacketE4[0x00] = 0x10;
-		PacketE4[0x02] = 0xE4;
-		PacketE4[0x03] = 0x00;
-		PacketE4[0x08] = slotnum;
-		PacketE4[0x0C] = 0x00;
-		cipher_ptr = &client->server_cipher;
-		encryptcopy (client, &PacketE4[0], sizeof (PacketE4));
-		ds_found = -1;
-		for (ds=0;ds<num_security;ds++)
-		{
-			if (security_data[ds]->guildcard == client->guildcard)
-			{
-				ds_found = ds;
-				security_data[ds]->slotnum = slotnum;
-				UpdateDataFile ("security.dat", ds, security_data[ds], sizeof (L_SECURITY_DATA), 0);
-				break;
-			}
-		}
-
-		if (ds_found == -1)
-		{
-			Send1A ("Could not select character.", client);
-			client->todc = 1;
-		}
-
-#else
 
 		sprintf (&myQuery[0], "SELECT * from character_data WHERE guildcard='%u' AND slot='%u'", client->guildcard, slotnum );
 		//printf ("MySQL query %s\n", myQuery );
@@ -1735,7 +1500,6 @@ void AckCharacter_Creation(unsigned char slotnum, BANANA* client)
 			Send1A ("Could not save character to database.\nPlease contact the server administrator.", client);
 			client->todc = 1;
 		}
-#endif
 	}
 	else
 		client->todc = 1;
@@ -1747,38 +1511,6 @@ void SendE4_E5(unsigned char slotnum, unsigned char selecting, BANANA* client)
 	
 	if ((client->guildcard) && (slotnum < 0x04))
 	{
-#ifdef NO_SQL
-		ds_found = -1;
-		for (ds=0;ds<num_characters;ds++)
-		{
-			if ((character_data[ds]->guildcard == client->guildcard) &&
-				(character_data[ds]->slot == slotnum))
-			{
-				ds_found = ds;
-				break;
-			}
-		}
-		if (ds_found != -1)
-		{
-				char_exists = 1;
-				if (!selecting)
-				{
-					mc = (MINICHAR*) &PacketE5[0x00];
-					*(unsigned short*) &PacketE5[0x10] = character_data[ds_found]->data.level;		// Updated level
-					memcpy (&PacketE5[0x14], &character_data[ds_found]->data.gcString[0], 0x70 );	// Updated data
-					*(unsigned *) &PacketE5[0x84] = character_data[ds_found]->data.playTime;		// Updated playtime
-					if ( mc->skinFlag )
-					{
-						// In case we got bots that crashed themselves...
-						mc->skin = 0;
-						mc->head = 0;
-						mc->hair = 0;
-					}
-				}
-		}
-
-
-#else
 		sprintf (&myQuery[0], "SELECT * from character_data WHERE guildcard='%u' AND slot='%u'", client->guildcard, slotnum );
 		//printf ("MySQL query %s\n", myQuery );
 
@@ -1815,7 +1547,6 @@ void SendE4_E5(unsigned char slotnum, unsigned char selecting, BANANA* client)
 			client->todc = 1;
 			return;
 		}
-#endif
 
 		if (!selecting)
 		{
@@ -1865,32 +1596,14 @@ void SendE4_E5(unsigned char slotnum, unsigned char selecting, BANANA* client)
 				{
 					cipher_ptr = &client->server_cipher;
 					encryptcopy (client, &PacketE4[0], sizeof (PacketE4));
-#ifdef NO_SQL
-					ds_found = -1;
-					for (ds=0;ds<num_security;ds++)
-					{
-						if (security_data[ds]->guildcard == client->guildcard)
-						{
-							ds_found = ds;
-							security_data[ds]->slotnum = slotnum;
-							UpdateDataFile ("security.dat", ds, security_data[ds], sizeof (L_SECURITY_DATA), 0);
-							break;
-						}
-					}
 
-					if (ds_found == -1)
-					{
-						Send1A ("Could not select character.", client);
-						client->todc = 1;
-					}
-#else
 					sprintf (&myQuery[0], "UPDATE security_data SET slotnum = '%u' WHERE guildcard = '%u'", slotnum, client->guildcard );
 					if ( mysql_query ( myData, &myQuery[0] ) )
 					{
 						Send1A ("Could not select character.", client);
 						client->todc = 1;
 					}
-#endif
+
 					client->sendCheck[SEND_PACKET_E4]++;
 				}
 				else
@@ -1965,34 +1678,6 @@ void SendDC (int sendChecksum, unsigned char PacketNum, BANANA* client)
 		client->sendCheck[SEND_PACKET_DC]++;
 		if (sendChecksum)
 		{
-#ifdef NO_SQL
-			for (ds=0;ds<num_guilds;ds++)
-			{
-				if (guild_data[ds]->accountid == client->guildcard)
-				{
-					if (total_guilds < 40)
-					{
-						friendid = guild_data[ds]->friendid;
-						sectionid = guild_data[ds]->sectionid;
-						_class = guild_data[ds]->pclass;
-						for (ch=0;ch<444;ch++)
-							client->guildcard_data[gc_ofs+ch] = 0x00;
-						*(unsigned*) &client->guildcard_data[gc_ofs] = friendid;
-						memcpy (&client->guildcard_data[gc_ofs+0x04], &guild_data[ds]->friendname, 0x18 );
-						memcpy (&client->guildcard_data[gc_ofs+0x54], &guild_data[ds]->friendtext, 0xB0 );
-						client->guildcard_data[gc_ofs+0x104] = 0x01;
-						client->guildcard_data[gc_ofs+0x106] = (unsigned char) sectionid;
-						*(unsigned short*) &client->guildcard_data[gc_ofs+0x107] = _class;
-						// comment @ 0x10C
-						memcpy (&client->guildcard_data[gc_ofs+0x10C], &guild_data[ds]->comment, 0x44 );
-						total_guilds++;
-						gc_ofs += 444;
-					}
-					else
-						break;
-				}
-			}
-#else
 			sprintf (&myQuery[0], "SELECT * from guild_data WHERE accountid='%u' ORDER BY priority", client->guildcard );
 			//printf ("MySQL query %s\n", myQuery );
 
@@ -2033,7 +1718,6 @@ void SendDC (int sendChecksum, unsigned char PacketNum, BANANA* client)
 				client->todc = 1;
 				return;
 			}
-#endif
 
 			if (total_guilds)
 			{
@@ -2457,15 +2141,6 @@ void ShipProcessPacket (ORANGE* ship)
 						ship->key_index = *(unsigned *) &ship->decryptbuf[0x46];
 
 						// update max ship key count on the fly
-#ifdef NO_SQL
-						max_ship_keys = 0;
-						for (ds=0;ds<num_shipkeys;ds++)
-						{
-							if (ship_data[ds]->idx >= max_ship_keys)
-								max_ship_keys = ship_data[ds]->idx;
-						}
-#else
-
 						sprintf (&myQuery[0], "SELECT * from ship_data" );
 
 						if ( ! mysql_query ( myData, &myQuery[0] ) )
@@ -2490,7 +2165,6 @@ void ShipProcessPacket (ORANGE* ship)
 							printf ("Unable to query the key database.\n");
 						}
 
-#endif
 
 						if ( ( ship->key_index ) && ( ship->key_index <= max_ship_keys ) )
 						{
@@ -2503,33 +2177,6 @@ void ShipProcessPacket (ORANGE* ship)
 							else
 							{
 								key_exists = 0;
-#ifdef NO_SQL
-								ds_found = -1;
-
-								for (ds=0;ds<num_shipkeys;ds++)
-								{
-									if (ship_data[ds]->idx == ship->key_index)
-									{
-										ds_found = ds;
-										for (ch2=0;ch2<32;ch2++)
-											if (ship_data[ds]->rc4key[ch2] != check_key[ch2])
-											{
-												ds_found = -1;
-												break;
-											}
-										break;
-									}
-								}
-
-								if (ds_found != -1)
-									key_exists = 1;
-								else
-								{
-									ShipSend02 (0x05, ship); // Ship key doesn't exist
-									ship->todc = 1;
-									shipOK = 0;
-								}
-#else
 								sprintf (&myQuery[0], "SELECT * from ship_data WHERE idx='%u'", ship->key_index );
 
 								if ( ! mysql_query ( myData, &myQuery[0] ) )
@@ -2552,7 +2199,6 @@ void ShipProcessPacket (ORANGE* ship)
 									ship->todc = 1;
 									shipOK = 0;
 								}
-#endif
 
 									if ( key_exists )
 									{
@@ -2576,15 +2222,10 @@ void ShipProcessPacket (ORANGE* ship)
 											ship->authed = 1;
 											ShipSend02 (0x01, ship);  // At this point, we should change keys...
 
-#ifdef NO_SQL
-											memcpy (&ship->user_key[0], &ship_data[ds_found]->rc4key, 128);
-#else
 											memcpy (&ship->user_key[0], myRow[0], 128 ); // 1024-bit key
 											mysql_free_result ( myResult );
-#endif
 
 											// change keys
-
 											for (ch2=0;ch2<128;ch2++)
 												if (ship->key_change[ch2] != -1)
 													ship->user_key[ch2] = (unsigned char) ship->key_change[ch2]; // update the key
@@ -2648,101 +2289,6 @@ void ShipProcessPacket (ORANGE* ship)
 				*(unsigned*) &ship->encryptbuf[0x02] = *(unsigned*)  &ship->decryptbuf[0x06];
 				*(unsigned short*) &ship->encryptbuf[0x06] = *(unsigned short*) &ship->decryptbuf[0x0A];
 				*(unsigned*) &ship->encryptbuf[0x08] = *(unsigned*) &ship->decryptbuf[0x0C];
-
-#ifdef NO_SQL
-				size = 0x0C;
-
-				ds_found = -1;
-
-				for (ds=0;ds<num_characters;ds++)
-				{
-					if ((character_data[ds]->guildcard == guildcard) && 
-						(character_data[ds]->slot == slotnum))
-					{
-						ds_found = ds;
-						break;
-					}
-				}
-
-				if (ds_found == -1)
-					ship->encryptbuf[0x01] = 0x02; // fail
-				else
-				{
-					PlayerData = (CHARDATA*) &ship->encryptbuf[0x0C];
-					memcpy (&ship->encryptbuf[0x0C], &character_data[ds_found]->data, sizeof (CHARDATA) );
-					size += sizeof (CHARDATA);
-					ship->encryptbuf[0x01] = 0x01; // success
-
-					// Copy common bank into packet.
-
-					ds_found = -1;
-
-					for (ds=0;ds<num_bankdata;ds++)
-					{
-						if (bank_data[ds]->guildcard == guildcard)
-						{
-							ds_found = ds;
-							memcpy (&ship->encryptbuf[0x0C+sizeof(CHARDATA)], &bank_data[ds]->common_bank, sizeof(BANK));
-							break;
-						}
-					}
-
-					if (ds_found == -1)
-					{
-						// Common bank needs to be created.
-
-						bank_data[num_bankdata] = (st_bank_file*) malloc (sizeof(L_BANK_DATA));
-						bank_data[num_bankdata]->guildcard = guildcard;
-						memcpy (&bank_data[num_bankdata]->common_bank, &empty_bank, sizeof (BANK));
-						memcpy (&ship->encryptbuf[0x0C+sizeof(CHARDATA)], &empty_bank, sizeof(BANK));
-						UpdateDataFile ("bank.dat", num_bankdata, bank_data[num_bankdata], sizeof (L_BANK_DATA), 1);
-						num_bankdata++;
-					}
-
-					size += sizeof (BANK);
-
-					ds_found = 1;
-					for (ds=0;ds<num_accounts;ds++)
-					{
-						if (account_data[ds]->guildcard == guildcard)
-						{
-							memcpy (&account_data[ds]->lastchar[0], &PlayerData->name[0], 24);
-							teamid = account_data[ds]->teamid;
-							privlevel = account_data[ds]->privlevel;
-							UpdateDataFile ("account.dat", ds, account_data[ds], sizeof (L_ACCOUNT_DATA), 0);
-							break;
-						}
-					}
-
-					if (teamid != -1)
-					{
-						//debug ("Retrieving some shit... ");
-						// Store the team information in the E7 packet...
-						PlayerData->guildCard2 = PlayerData->guildCard;
-						PlayerData->teamID = (unsigned) teamid;
-						PlayerData->privilegeLevel = privlevel;
-						ds_found = -1;
-						for (ds=0;ds<num_teams;ds++)
-						{
-							if (team_data[ds]->teamid == teamid)
-							{
-								PlayerData->teamName[0] = 0x09;
-								PlayerData->teamName[2] = 0x45;
-								memcpy ( &PlayerData->teamName[4], team_data[ds]->name, 24 );
-								memcpy ( &PlayerData->teamFlag[0], team_data[ds]->flag, 2048 );
-								break;
-							}
-						}
-					}
-					else
-						memset ( &PlayerData->guildCard2, 0, 0x83C );
-
-					PlayerData->unknown15 = 0x00986C84; // ??
-					memset ( &PlayerData->teamRewards[0], 0xFF, 4 );
-				}
-
-				compressShipPacket ( ship, &ship->encryptbuf[0x00], size );
-#else
 
 				sprintf (&myQuery[0], "SELECT * from character_data WHERE guildcard='%u' AND slot='%u'", guildcard, slotnum );
 
@@ -2864,7 +2410,6 @@ void ShipProcessPacket (ORANGE* ship)
 				}
 				else
 					debug ("Could not select character information for user %u", guildcard);
-#endif
 			}
 			break;
 		case 0x02:
@@ -2881,21 +2426,6 @@ void ShipProcessPacket (ORANGE* ship)
 				character = (CHARDATA*) &ship->decryptbuf[0x0C];
 
 				// Update common bank (A common bank SHOULD exist since they've logged on...)
-
-#ifdef NO_SQL
-
-				for (ds=0;ds<num_bankdata;ds++)
-				{
-					if (bank_data[ds]->guildcard == guildcard)
-					{
-						memcpy (&bank_data[ds]->common_bank, &ship->decryptbuf[0x0C+sizeof(CHARDATA)], sizeof (BANK));
-						UpdateDataFile ("bank.dat", ds, bank_data[ds], sizeof (L_BANK_DATA), 0);
-						break;
-					}
-				}
-
-#else
-
 				mysql_real_escape_string ( myData, (char*)&E7chardata[0], (const char*) &ship->decryptbuf[0x0C+sizeof(CHARDATA)], sizeof (BANK) );
 				sprintf (&myQuery[0], "UPDATE bank_data set data = '%s' WHERE guildcard = '%u'", (char*) &E7chardata[0], guildcard );
 				if ( mysql_query ( myData, &myQuery[0] ) )
@@ -2904,7 +2434,6 @@ void ShipProcessPacket (ORANGE* ship)
 					return;
 				}
 
-#endif
 				// Repair malformed data
 
 				character->name[0] = 0x09; // Filter colored names
@@ -2982,18 +2511,6 @@ void ShipProcessPacket (ORANGE* ship)
 						FixItem ( (ITEM*) &character->bankInventory[ch2] );
 				}
 
-#ifdef NO_SQL
-				for (ds=0;ds<num_characters;ds++)
-				{
-					if ((character_data[ds]->guildcard == guildcard) &&
-						(character_data[ds]->slot == slotnum))
-					{
-						memcpy (&character_data[ds]->data, &ship->decryptbuf[0x0C], sizeof (CHARDATA));
-						UpdateDataFile ("character.dat", ds, character_data[ds], sizeof (L_CHARACTER_DATA), 0);
-						break;
-					}
-				}
-#else
 				mysql_real_escape_string ( myData, (char*)&E7chardata[0], (const char*) &ship->decryptbuf[0x0C], sizeof (CHARDATA) );
 				sprintf (&myQuery[0], "UPDATE character_data set data = '%s' WHERE guildcard = '%u' AND slot = '%u'", (char*) &E7chardata[0], guildcard, slotnum );
 				if ( mysql_query ( myData, &myQuery[0] ) )
@@ -3002,7 +2519,6 @@ void ShipProcessPacket (ORANGE* ship)
 					return;
 				}
 				else
-#endif
 				{
 					ship->encryptbuf[0x00] = 0x04;
 					ship->encryptbuf[0x01] = 0x03;
@@ -3010,22 +2526,12 @@ void ShipProcessPacket (ORANGE* ship)
 					// Send the OK, data saved.
 					compressShipPacket ( ship, &ship->encryptbuf[0x00], 0x06 );
 				}
-#ifdef NO_SQL
-				for (ds=0;ds<num_keydata;ds++)
-				{
-					if (key_data[ds]->guildcard == guildcard)
-					{
-						memcpy (&key_data[ds]->controls, &ship->decryptbuf[0x2FCC], 420);
-						UpdateDataFile ("keydata.dat", ds, key_data[ds], sizeof (L_KEY_DATA), 0);
-						break;
-					}
-				}
-#else
+
 				mysql_real_escape_string ( myData, (char*)&E7chardata[0], (const char*) &ship->decryptbuf[0x2FCC], 420 );
 				sprintf (&myQuery[0], "UPDATE key_data set controls = '%s' WHERE guildcard = '%u'", (char*) &E7chardata[0], guildcard );
 				if ( mysql_query ( myData, &myQuery[0] ) )
 					debug ("Could not save control information for guild card user %u", guildcard);
-#endif
+
 			}
 		}
 		break;
@@ -3041,84 +2547,12 @@ void ShipProcessPacket (ORANGE* ship)
 			{
 				unsigned clientGcn, friendGcn;
 				int gc_priority;
-#ifdef NO_SQL
-				unsigned ch2;
-#endif
-#ifndef NO_SQL
 				unsigned num_gcs;
 				int gc_exists;
 				unsigned char friendSecID, friendClass;
-#endif
 
 				clientGcn = *(unsigned*) &ship->decryptbuf[0x06];
 				friendGcn = *(unsigned*) &ship->decryptbuf[0x0A];
-
-#ifdef NO_SQL
-				ds_found = -1;
-				for (ds=0;ds<num_guilds;ds++)
-				{
-					if ((guild_data[ds]->accountid == clientGcn) &&
-						(guild_data[ds]->friendid == friendGcn))
-					{
-						ds_found = ds;
-						break;
-					}
-				}
-				gc_priority = 0;
-				ch2 = 0;
-				free_record = -1;
-				for (ds=0;ds<num_guilds;ds++)
-				{
-					if (guild_data[ds]->accountid == clientGcn)
-					{
-						ch2++;
-						if (guild_data[ds]->priority > gc_priority)
-							gc_priority = guild_data[ds]->priority;
-					}
-					if (guild_data[ds]->accountid == 0)
-						free_record = ds;
-				}
-				gc_priority++;
-				if ( ( ch2 < 40 ) || ( ds_found != -1 ) )
-				{
-					if ( ds_found != -1 )
-						new_record = 0;
-					else
-					{
-						if (free_record != -1)
-							ds_found = free_record;
-						else
-						{
-							new_record = 1;
-							ds_found = num_guilds;
-							guild_data[num_guilds++] = (st_guild*) malloc ( sizeof (L_GUILD_DATA) );
-						}
-					}
-
-					guild_data[ds_found]->sectionid = ship->decryptbuf[0xD6];
-					guild_data[ds_found]->pclass = ship->decryptbuf[0xD7];
-
-					gccomment[44] = 0x0000;
-
-					guild_data[ds_found]->accountid = clientGcn;
-					guild_data[ds_found]->friendid = friendGcn;
-					guild_data[ds_found]->reserved = 257;
-					memcpy (&guild_data[ds_found]->friendname[0], &ship->decryptbuf[0x0E], 24);
-					memcpy (&guild_data[ds_found]->friendtext[0], &ship->decryptbuf[0x26], 176);
-					memcpy (&guild_data[ds_found]->comment[0], &gccomment[0], 90);
-					guild_data[ds_found]->priority = gc_priority;
-					UpdateDataFile ("guild.dat", ds_found, guild_data[ds_found], sizeof(L_GUILD_DATA), new_record);
-				}
-				else
-				{
-					// Card list full.
-					ship->encryptbuf[0x00] = 0x07;
-					ship->encryptbuf[0x01] = 0x00;
-					*(unsigned*) &ship->encryptbuf[0x02] = clientGcn;
-					compressShipPacket (ship, &ship->encryptbuf[0x00], 6);
-				}
-
-#else
 
 				// Delete guild card if it exists...
 
@@ -3196,7 +2630,6 @@ void ShipProcessPacket (ORANGE* ship)
 					*(unsigned*) &ship->encryptbuf[0x02] = clientGcn;
 					compressShipPacket (ship, &ship->encryptbuf[0x00], 6);
 				}
-#endif
 			}
 			break;
 		case 0x01:
@@ -3207,23 +2640,9 @@ void ShipProcessPacket (ORANGE* ship)
 				clientGcn = *(unsigned*) &ship->decryptbuf[0x06];
 				deletedGcn = *(unsigned*) &ship->decryptbuf[0x0A];
 
-#ifdef NO_SQL
-				for (ds=0;ds<num_guilds;ds++)
-				{
-					if ((guild_data[ds]->accountid == clientGcn) &&
-						(guild_data[ds]->friendid == deletedGcn))
-					{
-						guild_data[ds]->accountid = 0;
-						UpdateDataFile ("guild.dat", ds, guild_data[ds], sizeof (L_GUILD_DATA), 0);
-						break;
-					}
-				}
-#else
-
 				sprintf (&myQuery[0], "DELETE from guild_data WHERE accountid = '%u' AND friendid = '%u'", clientGcn, deletedGcn );
 				if ( mysql_query ( myData, &myQuery[0] ) )
 					debug ("Could not delete guild card for user %u", clientGcn );
-#endif
 			}
 			break;
 		case 0x02:
@@ -3233,25 +2652,13 @@ void ShipProcessPacket (ORANGE* ship)
 
 				clientGcn = *(unsigned*) &ship->decryptbuf[0x06];
 				friendGcn = *(unsigned*) &ship->decryptbuf[0x0A];
-#ifdef NO_SQL
-				for (ds=0;ds<num_guilds;ds++)
-				{
-					if ((guild_data[ds]->accountid == clientGcn) &&
-						(guild_data[ds]->friendid == friendGcn))
-					{
-						memcpy (&guild_data[ds]->comment[0], &ship->decryptbuf[0x0E], 0x44);
-						guild_data[ds]->comment[34] = 0; // ??
-						UpdateDataFile ("guild.dat", ds, guild_data[ds], sizeof(L_GUILD_DATA), 0);
-					}
-				}
-#else
+
 				mysql_real_escape_string (myData, (char*)&gctext[0], (const char*)&ship->decryptbuf[0x0E], 0x44);
 
 				sprintf (&myQuery[0], "UPDATE guild_data set comment = '%s' WHERE accountid = '%u' AND friendid = '%u'", (char*) &gctext[0], clientGcn, friendGcn );
 
 				if ( mysql_query ( myData, &myQuery[0] ) )
 					debug ("Could not update guild card comment for user %u", clientGcn );
-#endif
 			}
 			break;
 		case 0x03:
@@ -3259,9 +2666,6 @@ void ShipProcessPacket (ORANGE* ship)
 			{
 				unsigned clientGcn, gcn1, gcn2;
 				int priority1, priority2, priority_save;
-#ifdef NO_SQL
-				L_GUILD_DATA tempgc;
-#endif
 
 				priority1 = -1;
 				priority2 = -1;
@@ -3270,18 +2674,6 @@ void ShipProcessPacket (ORANGE* ship)
 				gcn1 = *(unsigned*) &ship->decryptbuf[0x0A];
 				gcn2 = *(unsigned*) &ship->decryptbuf[0x0E];
 
-#ifdef NO_SQL
-				for (ds=0;ds<num_guilds;ds++)
-				{
-					if ((guild_data[ds]->accountid == clientGcn) &&
-						(guild_data[ds]->friendid == gcn1))
-					{
-						priority1 = guild_data[ds]->priority;
-						ds_found = ds;
-						break;
-					}
-				}
-#else
 				sprintf (&myQuery[0], "SELECT * from guild_data WHERE accountid='%u' AND friendid='%u'", clientGcn, gcn1 );
 
 				if ( ! mysql_query ( myData, &myQuery[0] ) )
@@ -3299,20 +2691,7 @@ void ShipProcessPacket (ORANGE* ship)
 					debug ("Could not select existing guild card information for user %u", clientGcn);
 					return;
 				}
-#endif
 
-#ifdef NO_SQL
-				for (ds=0;ds<num_guilds;ds++)
-				{
-					if ((guild_data[ds]->accountid == clientGcn) &&
-						(guild_data[ds]->friendid == gcn2))
-					{
-						priority2 = guild_data[ds]->priority;
-						ds2 = ds;
-						break;
-					}
-				}
-#else
 				sprintf (&myQuery[0], "SELECT * from guild_data WHERE accountid='%u' AND friendid='%u'", clientGcn, gcn2 );
 
 				if ( ! mysql_query ( myData, &myQuery[0] ) )
@@ -3330,7 +2709,6 @@ void ShipProcessPacket (ORANGE* ship)
 					debug ("Could not select existing guild card information for user %u", clientGcn);
 					return;
 				}
-#endif
 
 				if ((priority1 != -1) && (priority2 != -1))
 				{
@@ -3338,22 +2716,12 @@ void ShipProcessPacket (ORANGE* ship)
 					priority1 = priority2;
 					priority2 = priority_save;
 
-#ifdef NO_SQL
-					guild_data[ds_found]->priority = priority2;
-					guild_data[ds2]->priority = priority_save;
-					UpdateDataFile ("guild.dat", ds_found, guild_data[ds2], sizeof (L_GUILD_DATA), 0);
-					UpdateDataFile ("guild.dat", ds2, guild_data[ds_found], sizeof (L_GUILD_DATA), 0);
-					memcpy (&tempgc, guild_data[ds_found], sizeof (L_GUILD_DATA));
-					memcpy (guild_data[ds_found], guild_data[ds2], sizeof (L_GUILD_DATA));
-					memcpy (guild_data[ds2], &tempgc, sizeof (L_GUILD_DATA));
-#else
 					sprintf (&myQuery[0], "UPDATE guild_data SET priority = '%u' WHERE accountid = '%u' AND friendid = '%u'", priority1, clientGcn, gcn1 );
 					if ( mysql_query ( myData, &myQuery[0] ) )
 						debug ("Could not update guild card sort information for user %u", clientGcn);
 					sprintf (&myQuery[0], "UPDATE guild_data SET priority = '%u' WHERE accountid = '%u' AND friendid = '%u'", priority2, clientGcn, gcn2 );
 					if ( mysql_query ( myData, &myQuery[0] ) )
 						debug ("Could not update guild card sort information for user %u", clientGcn);
-#endif
 				}
 			}
 			break;
@@ -3374,19 +2742,6 @@ void ShipProcessPacket (ORANGE* ship)
 				teamid = *(unsigned*) &ship->decryptbuf[0x12];
 
 				// First let's be sure our friend has this person's guild card....
-
-#ifdef NO_SQL
-				for (ds=0;ds<num_guilds;ds++)
-				{
-					if ((guild_data[ds]->accountid == clientGcn) &&
-						(guild_data[ds]->friendid == friendGcn))
-					{
-						gc_exists = 1;
-						break;
-					}
-				}
-#else
-
 				sprintf (&myQuery[0], "SELECT * from guild_data WHERE accountid='%u' AND friendid='%u'", clientGcn, friendGcn );
 
 				//printf ("MySQL query %s\n", myQuery );
@@ -3402,22 +2757,7 @@ void ShipProcessPacket (ORANGE* ship)
 					debug ("Could not select existing guild card information for user %u", clientGcn);
 					return;
 				}
-#endif
 
-#ifdef NO_SQL
-				if ( ( gc_exists == 0 ) && ( teamid != 0 ) )
-				{
-					for (ds=0;ds<num_accounts;ds++)
-					{
-						if ((account_data[ds]->guildcard == friendGcn) &&
-							(account_data[ds]->teamid == teamid))
-						{
-							gc_exists = 1;
-							break;
-						}
-					}
-				}
-#else
 				if ( ( gc_exists == 0 ) && ( teamid != 0 ) )
 				{
 					// Well, they don't appear to have this person's guild card... so let's check the team list...
@@ -3437,7 +2777,6 @@ void ShipProcessPacket (ORANGE* ship)
 						return;
 					}
 				}
-#endif
 
 				if ( gc_exists )
 				{
@@ -3477,18 +2816,6 @@ void ShipProcessPacket (ORANGE* ship)
 				teamid = *(unsigned*) &ship->decryptbuf[0x462];
 
 				// First let's be sure our friend has this person's guild card....
-
-#ifdef NO_SQL
-				for (ds=0;ds<num_guilds;ds++)
-				{
-					if ((guild_data[ds]->accountid == clientGcn) &&
-						(guild_data[ds]->friendid == friendGcn))
-					{
-						gc_exists = 1;
-						break;
-					}
-				}
-#else
 				sprintf (&myQuery[0], "SELECT * from guild_data WHERE accountid='%u' AND friendid='%u'", clientGcn, friendGcn );
 
 				//printf ("MySQL query %s\n", myQuery );
@@ -3504,23 +2831,7 @@ void ShipProcessPacket (ORANGE* ship)
 					debug ("Could not select existing guild card information for user %u", clientGcn);
 					return;
 				}
-#endif
 
-
-#ifdef NO_SQL
-				if ( ( gc_exists == 0 ) && ( teamid != 0 ) )
-				{
-					for (ds=0;ds<num_accounts;ds++)
-					{
-						if ((account_data[ds]->guildcard == friendGcn) &&
-							(account_data[ds]->teamid == teamid))
-						{
-							gc_exists = 1;
-							break;
-						}
-					}
-				}
-#else
 				if ( ( gc_exists == 0 ) && ( teamid != 0 ) )
 				{
 					// Well, they don't appear to have this person's guild card... so let's check the team list...
@@ -3540,7 +2851,6 @@ void ShipProcessPacket (ORANGE* ship)
 						return;
 					}
 				}
-#endif
 
 				if ( gc_exists )
 				{
@@ -3582,15 +2892,10 @@ void ShipProcessPacket (ORANGE* ship)
 				//
 				//
 				unsigned char CreateResult;
-				int team_exists, teamid;
+				int team_exists = 0, teamid = 0;
 				unsigned highid;
 				unsigned gcn;
-#ifndef NO_SQL
-				unsigned char TeamNameCheck[50];
-#else
-				unsigned short char_check;
-				int match;
-#endif
+                unsigned char TeamNameCheck[50];
 
 				gcn = *(unsigned*) &ship->decryptbuf[0x1E];
 				// First check to see if the team exists...
@@ -3598,33 +2903,6 @@ void ShipProcessPacket (ORANGE* ship)
 				team_exists = 0;
 				highid = 0;
 
-#ifdef NO_SQL
-				free_record = -1;
-				for (ds=0;ds<num_teams;ds++)
-				{
-					if (team_data[ds]->owner == 0)
-						free_record = ds;
-					if (team_data[ds]->teamid >= highid)
-						highid = team_data[ds]->teamid;
-					match = 1;
-					for (ds2=0;ds2<12;ds2++)
-					{
-						char_check = *(unsigned short*) &ship->decryptbuf[0x06+(ds2*2)];
-						if (team_data[ds]->name[ds2] != char_check)
-						{
-							match = 0;
-							break;
-						}
-						if (char_check == 0x0000)
-							break;
-					}
-					if (match)
-					{
-						team_exists = 1;
-						break;
-					}
-				}
-#else
 				mysql_real_escape_string (myData, (char*)&TeamNameCheck[0], (const char*)&ship->decryptbuf[0x06], 24);
 				sprintf (&myQuery[0], "SELECT * from team_data WHERE name='%s'", (char*) &TeamNameCheck[0] );
 				if ( ! mysql_query ( myData, &myQuery[0] ) )
@@ -3635,41 +2913,10 @@ void ShipProcessPacket (ORANGE* ship)
 				}
 				else
 					CreateResult = 1;
-#endif
 
 					if ( !team_exists )
 					{
 						// It doesn't... but it will now. :)
-#ifdef NO_SQL
-						if (free_record != -1)
-						{
-							new_record = 0;
-							ds_found = free_record;
-						}
-						else
-						{
-							new_record = 1;
-							ds_found = num_teams;
-							team_data[num_teams++] = (st_team_data*) malloc ( sizeof (L_TEAM_DATA) );
-						}
-						memcpy (&team_data[ds_found]->name[0], &ship->decryptbuf[0x06], 24);
-						memcpy (&team_data[ds_found]->flag, &DefaultTeamFlag, 2048);
-						team_data[ds_found]->owner = gcn;
-						highid++;
-						team_data[ds_found]->teamid = teamid = highid;
-						UpdateDataFile ("team.dat", ds_found, team_data[ds_found], sizeof (L_TEAM_DATA), new_record);
-						CreateResult = 0;
-						for (ds=0;ds<num_accounts;ds++)
-						{
-							if (account_data[ds]->guildcard == gcn)
-							{
-								account_data[ds]->teamid = highid;
-								account_data[ds]->privlevel = 0x40;
-								UpdateDataFile ("account.dat", ds, account_data[ds], sizeof (L_ACCOUNT_DATA), 0);
-								break;
-							}
-						}
-#else
 						sprintf (&myQuery[0], "INSERT into team_data (name,owner,flag) VALUES ('%s','%u','%s')", (char*) &TeamNameCheck[0], gcn, (char*) &DefaultTeamFlagSlashes[0]);
 						if ( ! mysql_query ( myData, &myQuery[0] ) )
 						{
@@ -3682,7 +2929,6 @@ void ShipProcessPacket (ORANGE* ship)
 						}
 						else
 							CreateResult = 1;
-#endif
 					}
 					else
 						CreateResult = 2;
@@ -3708,23 +2954,6 @@ void ShipProcessPacket (ORANGE* ship)
 				unsigned teamid;
 
 				teamid = *(unsigned*) &ship->decryptbuf[0x806];
-#ifdef NO_SQL
-				for (ds=0;ds<num_teams;ds++)
-				{
-					if (team_data[ds]->teamid == teamid)
-					{
-						memcpy (&team_data[ds]->flag, &ship->decryptbuf[0x06], 0x800);
-						ship->encryptbuf[0x00] = 0x09;
-						ship->encryptbuf[0x01] = 0x01;
-						ship->encryptbuf[0x02] = 0x01;
-						*(unsigned*) &ship->encryptbuf[0x03] = teamid;
-						memcpy ( &ship->encryptbuf[0x07], &ship->decryptbuf[0x06], 0x800 );
-						compressShipPacket (ship, &ship->encryptbuf[0x00], 0x807);
-						UpdateDataFile ("team.dat", ds, team_data[ds], sizeof (L_TEAM_DATA), 0);
-						break;
-					}
-				}
-#else
 				mysql_real_escape_string ( myData, (char*)&FlagSlashes[0], (const char*)&ship->decryptbuf[0x06], 0x800 );
 				sprintf ( &myQuery[0], "UPDATE team_data SET flag='%s' WHERE teamid='%u'", (char*) &FlagSlashes[0], teamid );
 				if (! mysql_query ( myData, &myQuery[0] ) )
@@ -3741,7 +2970,6 @@ void ShipProcessPacket (ORANGE* ship)
 					debug ("Could not update team flag for team %u", teamid);
 					return;
 				}
-#endif
 
 			}
 			break;
@@ -3754,30 +2982,12 @@ void ShipProcessPacket (ORANGE* ship)
 				unsigned teamid;
 
 				teamid = *(unsigned*) &ship->decryptbuf[0x06];
-#ifdef NO_SQL
-				for (ds=0;ds<num_teams;ds++)
-				{
-					if (team_data[ds]->teamid == teamid)
-					{
-						team_data[ds]->teamid = 0;
-						team_data[ds]->owner = 0;
-						UpdateDataFile ("team.dat", ds, team_data[ds], sizeof (L_TEAM_DATA), 0);
-						break;
-					}
-				}
 
-				for (ds=0;ds<num_accounts;ds++)
-				{
-					if (account_data[ds]->teamid == teamid)
-						account_data[ds]->teamid = -1;
-					UpdateDataFile ("account.dat", ds, account_data[ds], sizeof (L_ACCOUNT_DATA), 0);
-				}
-#else
 				sprintf (&myQuery[0], "DELETE from team_data WHERE teamid='%u'", teamid );
 				mysql_query (myData, &myQuery[0]);
 				sprintf (&myQuery[0], "UPDATE account_data SET teamid='-1' WHERE teamid='%u'", teamid);
 				mysql_query (myData, &myQuery[0]);
-#endif
+
 				ship->encryptbuf[0x00] = 0x09;
 				ship->encryptbuf[0x01] = 0x02;
 				ship->encryptbuf[0x02] = 0x01;
@@ -3796,21 +3006,10 @@ void ShipProcessPacket (ORANGE* ship)
 
 				teamid = *(unsigned*) &ship->decryptbuf[0x06];
 				gcn = *(unsigned*) &ship->decryptbuf[0x0A];
-#ifdef NO_SQL
-				for (ds=0;ds<num_accounts;ds++)
-				{
-					if ((account_data[ds]->guildcard == gcn) &&
-						(account_data[ds]->teamid == teamid))
-					{
-						account_data[ds]->teamid = -1;
-						UpdateDataFile ("account.dat", ds, account_data[ds], sizeof (L_ACCOUNT_DATA), 0);
-						break;
-					}
-				}
-#else
+
 				sprintf (&myQuery[0], "UPDATE account_data SET teamid='-1' WHERE guildcard='%u' AND teamid = '%u'", gcn, teamid);
 				mysql_query (myData, &myQuery[0]);
-#endif
+
 				ship->encryptbuf[0x00] = 0x09;
 				ship->encryptbuf[0x01] = 0x03;
 				ship->encryptbuf[0x02] = 0x01;
@@ -3841,13 +3040,8 @@ void ShipProcessPacket (ORANGE* ship)
 			{
 				unsigned teamid, packet_offset;
 				int num_mates;
-#ifndef NO_SQL
 				int ch;
 				unsigned guildcard, privlevel;
-#else
-				unsigned save_offset;
-#endif
-
 
 				teamid = *(unsigned*) &ship->decryptbuf[0x06];
 				ship->encryptbuf[0x00] = 0x09;
@@ -3859,33 +3053,7 @@ void ShipProcessPacket (ORANGE* ship)
 				ship->encryptbuf[0x0D] = 0x09;
 				memset (&ship->encryptbuf[0x0E], 0, 4);
 				packet_offset = 0x12;
-#ifdef NO_SQL
-				save_offset = packet_offset;
-				packet_offset += 4;
-				num_mates = 0;
-				for (ds=0;ds<num_accounts;ds++)
-				{
-					if (account_data[ds]->teamid == teamid)
-					{
-						num_mates++;
-						*(unsigned*) &ship->encryptbuf[packet_offset] = num_mates;
-						packet_offset += 4;
-						*(unsigned*) &ship->encryptbuf[packet_offset] = account_data[ds]->privlevel;
-						packet_offset += 4;
-						*(unsigned*) &ship->encryptbuf[packet_offset] = account_data[ds]->guildcard;
-						packet_offset += 4;
-						memcpy (&ship->encryptbuf[packet_offset], &account_data[ds]->lastchar, 24);
-						packet_offset += 24;
-						memset (&ship->encryptbuf[packet_offset], 0, 8);
-						packet_offset += 8;
-					}
-				}
-				*(unsigned*) &ship->encryptbuf[save_offset] = num_mates;
-				packet_offset -= 0x0A;
-				*(unsigned short*) &ship->encryptbuf[0x0A] = (unsigned short) packet_offset;
-				packet_offset += 0x0A;
-				compressShipPacket (ship, &ship->encryptbuf[0x00], packet_offset);
-#else
+
 				sprintf (&myQuery[0], "SELECT guildcard,privlevel,lastchar from account_data WHERE teamid='%u'", teamid );
 				if ( ! mysql_query ( myData, &myQuery[0] ) )
 				{
@@ -3920,7 +3088,6 @@ void ShipProcessPacket (ORANGE* ship)
 					debug ("Could not get team list for team %u", teamid);
 					return;
 				}
-#endif
 			}
 			break;
 		case 0x06:
@@ -3937,37 +3104,12 @@ void ShipProcessPacket (ORANGE* ship)
 				teamid = *(unsigned*) &ship->decryptbuf[0x06];
 				gcn = *(unsigned*) &ship->decryptbuf[0x0A];
 				privlevel = (unsigned char) ship->decryptbuf[0x0E];
-#ifdef NO_SQL
-				for (ds=0;ds<num_accounts;ds++)
-				{
-					if ((account_data[ds]->guildcard == gcn) &&
-						(account_data[ds]->teamid == teamid))
-					{
-						account_data[ds]->privlevel = privlevel;
-						UpdateDataFile ("account.dat", ds, account_data[ds], sizeof (L_ACCOUNT_DATA), 0);
-						break;
-					}
-				}
 
-				if (privlevel == 0x40)
-				{
-					for (ds=0;ds<num_accounts;ds++)
-					{
-						if (team_data[ds]->teamid == teamid)
-						{
-							team_data[ds]->owner = gcn;
-							UpdateDataFile ("team.dat", ds, team_data[ds], sizeof (L_TEAM_DATA), 0);
-							break;
-						}
-					}
-				}
-#else
 				sprintf (&myQuery[0], "UPDATE account_data SET privlevel='%u' WHERE guildcard='%u' AND teamid='%u'", privlevel, gcn, teamid);
 				mysql_query (myData, &myQuery[0]);
 				if (privlevel == 0x40)  // Master Transfer
 					sprintf (&myQuery[0], "UPDATE team_data SET owner='%u' WHERE teamid='%u'", gcn, teamid);
 				mysql_query (myData, &myQuery[0]);
-#endif
 				ship->encryptbuf[0x00] = 0x09;
 				ship->encryptbuf[0x01] = 0x06;
 				ship->encryptbuf[0x02] = 0x01;
@@ -3985,21 +3127,9 @@ void ShipProcessPacket (ORANGE* ship)
 
 				teamid = *(unsigned*) &ship->decryptbuf[0x06];
 				gcn = *(unsigned*) &ship->decryptbuf[0x0A];
-#ifdef NO_SQL
-				for (ds=0;ds<num_accounts;ds++)
-				{
-					if (account_data[ds]->guildcard == gcn)
-					{
-						account_data[ds]->teamid = teamid;
-						account_data[ds]->privlevel = 0;
-						UpdateDataFile ("account.dat", ds, account_data[ds], sizeof (L_ACCOUNT_DATA), 0);
-						break;
-					}
-				}
-#else
+
 				sprintf (&myQuery[0], "UPDATE account_data SET teamid='%u', privlevel='0' WHERE guildcard='%u'", teamid, gcn);
 				mysql_query (myData, &myQuery[0]);
-#endif
 				ship->encryptbuf[0x00] = 0x09;
 				ship->encryptbuf[0x01] = 0x07;
 				ship->encryptbuf[0x02] = 0x01;
@@ -4016,60 +3146,14 @@ void ShipProcessPacket (ORANGE* ship)
 		{
 		case 0x00:
 			{
-				int security_client_thirtytwo, security_thirtytwo_check;
-				long long security_client_sixtyfour, security_sixtyfour_check;
+				int security_client_thirtytwo, security_thirtytwo_check = 0;
+				long long security_client_sixtyfour, security_sixtyfour_check = 0;
 				unsigned char fail_to_auth = 0;
 				unsigned gcn;
-				unsigned char slotnum;
+				unsigned char slotnum = 0;
 				unsigned char isgm = '\0';
 
 				gcn = *(unsigned*) &ship->decryptbuf[0x06];
-#ifdef NO_SQL
-				for (ds=0;ds<num_security;ds++)
-				{
-					if (security_data[ds]->guildcard == gcn)
-					{
-						int found_match;
-
-						security_thirtytwo_check = security_data[ds]->thirtytwo;
-						security_sixtyfour_check = security_data[ds]->sixtyfour;
-						slotnum = security_data[ds]->slotnum;
-						isgm = security_data[ds]->isgm;
-
-						found_match = 0;
-
-						security_client_sixtyfour = *(long long*) &ship->decryptbuf[0x0E];
-						if (security_client_sixtyfour == security_sixtyfour_check)
-							found_match = 1;
-
-						security_client_sixtyfour = *(long long*) &ship->decryptbuf[0x16];
-						if (security_client_sixtyfour == security_sixtyfour_check)
-							found_match = 1;
-
-						security_client_sixtyfour = *(long long*) &ship->decryptbuf[0x1E];
-						if (security_client_sixtyfour == security_sixtyfour_check)
-							found_match = 1;
-
-						security_client_sixtyfour = *(long long*) &ship->decryptbuf[0x26];
-						if (security_client_sixtyfour == security_sixtyfour_check)
-							found_match = 1;
-
-						security_client_sixtyfour = *(long long*) &ship->decryptbuf[0x2E];
-						if (security_client_sixtyfour == security_sixtyfour_check)
-							found_match = 1;
-
-						if (found_match == 0)
-							fail_to_auth = 1;
-
-						security_client_thirtytwo = *(unsigned *) &ship->decryptbuf[0x0A];
-
-						if (security_client_thirtytwo != security_thirtytwo_check)
-							fail_to_auth = 1;
-
-						break;
-					}
-				}
-#else
 				sprintf (&myQuery[0], "SELECT * from security_data WHERE guildcard='%u'", gcn );
 				// Nom nom nom
 				if ( ! mysql_query ( myData, &myQuery[0] ) )
@@ -4125,7 +3209,7 @@ void ShipProcessPacket (ORANGE* ship)
 				}
 				else
 					fail_to_auth = 1;
-#endif
+
 				ship->encryptbuf[0x00] = 0x0B;
 				ship->encryptbuf[0x01] = fail_to_auth;
 				*(unsigned *) &ship->encryptbuf[0x02] = gcn;
@@ -4232,9 +3316,6 @@ void CharacterProcessPacket (BANANA* client)
 	unsigned shipNum;
 	int security_client_thirtytwo, security_thirtytwo_check;
 	long long security_client_sixtyfour, security_sixtyfour_check;
-#ifdef NO_SQL
-	long long truehwinfo;
-#endif
 
 	switch (client->decryptbuf[0x02])
 	{
@@ -4276,101 +3357,8 @@ void CharacterProcessPacket (BANANA* client)
 			memcpy (&username[0], &client->decryptbuf[0x1C], 17 );
 			memcpy (&password[0], &client->decryptbuf[0x4C], 17 );
 			memset (&hwinfo[0], 0, 18);
-#ifdef NO_SQL
-			*(long long*) &client->hwinfo[0] = *(long long*) &client->decryptbuf[0x84];
-			truehwinfo = *(long long*) &client->decryptbuf[0x84];
-			fail_to_auth = 2; // default fail with wrong username
-			for (ds=0;ds<num_accounts;ds++)
-			{
-				if (!strcmp(&account_data[ds]->username[0], &username[0]))
-				{
-					fail_to_auth = 0;
-					sprintf (&password[strlen(password)], "_%u_salt", account_data[ds]->regtime );
-					MDString ((char*)&password[0], (char*)&MDBuffer[0] );
-					for (ch=0;ch<16;ch++)
-						sprintf (&md5password[ch*2], "%02x", (unsigned char) MDBuffer[ch]);
-					md5password[32] = 0;
-					if (!strcmp(&md5password[0],&account_data[ds]->password[0]))
-					{
-						if (account_data[ds]->isbanned)
-							fail_to_auth = 3;
-						if (!account_data[ds]->isactive)
-							fail_to_auth = 5;
-						if (!fail_to_auth)
-							gcn = account_data[ds]->guildcard;
-						 if (client->decryptbuf[0x10] != PSO_CLIENT_VER)
-							fail_to_auth = 7;
-						client->isgm = account_data[ds]->isgm;
-					}
-					else
-						fail_to_auth = 2;
-					break;
-				}
-			}
 
-			// DO HW BAN LATER
-
-			if (!fail_to_auth)
-			{
-				for (ds=0;ds<num_security;ds++)
-				{
-					if (security_data[ds]->guildcard == gcn)
-					{
-						int found_match;
-
-						client->dress_flag = 0;
-						for (ch=0;ch<MAX_DRESS_FLAGS;ch++)
-						{
-							if (dress_flags[ch].guildcard == gcn)
-								client->dress_flag = 1;
-						}
-
-						security_thirtytwo_check = security_data[ds]->thirtytwo;
-						security_sixtyfour_check = security_data[ds]->sixtyfour;
-						client->slotnum = security_data[ds]->slotnum;
-
-						found_match = 0;
-
-						security_client_sixtyfour = *(long long*) &client->decryptbuf[0x8C];
-						if (security_client_sixtyfour == security_sixtyfour_check)
-							found_match = 1;
-
-						security_client_sixtyfour = *(long long*) &client->decryptbuf[0x94];
-						if (security_client_sixtyfour == security_sixtyfour_check)
-							found_match = 1;
-					
-						security_client_sixtyfour = *(long long*) &client->decryptbuf[0x9C];
-						if (security_client_sixtyfour == security_sixtyfour_check)
-							found_match = 1;
-
-						security_client_sixtyfour = *(long long*) &client->decryptbuf[0xA4];
-						if (security_client_sixtyfour == security_sixtyfour_check)
-							found_match = 1;
-					
-						security_client_sixtyfour = *(long long*) &client->decryptbuf[0xAC];
-						if (security_client_sixtyfour == security_sixtyfour_check)
-							found_match = 1;
-
-						if (found_match == 0)
-							fail_to_auth = 6;
-
-						security_client_thirtytwo = *(unsigned *) &client->decryptbuf[0x18];
-
-						if (security_client_thirtytwo == 0)
-							client->sendingchars = 1;
-						else
-						{
-							client->sendingchars = 0;
-							if (security_client_thirtytwo != security_thirtytwo_check)
-								fail_to_auth = 6;
-						}
-						break;
-					}
-				}
-			}
-
-#else
-			mysql_real_escape_string ( myData, (char*)&hwinfo[0], (const char*)&client->decryptbuf[0x84], 8);
+            mysql_real_escape_string ( myData, (char*)&hwinfo[0], (const char*)&client->decryptbuf[0x84], 8);
 			memcpy (&client->hwinfo[0], &hwinfo[0], 18);
 			sprintf (&myQuery[0], "SELECT * from account_data WHERE username='%s'", username );
 
@@ -4503,7 +3491,6 @@ void CharacterProcessPacket (BANANA* client)
 					mysql_free_result ( myResult );
 				}
 			}
-#endif
 
 			switch (fail_to_auth)
 			{
@@ -4520,17 +3507,7 @@ void CharacterProcessPacket (BANANA* client)
 					for (ch=0;ch<4;ch++)
 						MDBuffer[ch] = (unsigned char)( rand() % 256 );
 					security_thirtytwo_check = *(unsigned *) &MDBuffer[0];
-#ifdef NO_SQL
-					for (ds=0;ds<num_security;ds++)
-					{
-						if (security_data[ds]->guildcard == gcn)
-						{
-							security_data[ds]->thirtytwo = security_thirtytwo_check;
-							UpdateDataFile ("security.dat", ds, security_data[ds], sizeof (L_SECURITY_DATA), 0);
-							break;
-						}
-					}
-#else
+
 					sprintf (&myQuery[0], "UPDATE security_data set thirtytwo = '%i' WHERE guildcard = '%u'", security_thirtytwo_check, gcn );
 					// Nom, nom, nom.
 					if ( mysql_query ( myData, &myQuery[0] ) )
@@ -4539,7 +3516,7 @@ void CharacterProcessPacket (BANANA* client)
 						client->todc = 1;
 						return;
 					}
-#endif
+
 				}
 				*(unsigned *) &client->encryptbuf[0x14] = security_thirtytwo_check;
 				cipher_ptr = &client->server_cipher;
@@ -4555,21 +3532,9 @@ void CharacterProcessPacket (BANANA* client)
 					{
 						// User has completed the login process, after updating the SQL info with their
 						// access information, give 'em the ship select screen.
-#ifdef NO_SQL
-						for (ds=0;ds<num_accounts;ds++)
-						{
-							if (account_data[ds]->guildcard == gcn)
-							{
-								memcpy (&account_data[ds]->lastip[0], &client->IP_Address[0], 16);
-								account_data[ds]->lasthwinfo = truehwinfo;
-								UpdateDataFile ("account.dat", ds, account_data[ds], sizeof (L_ACCOUNT_DATA), 0);
-								break;
-							}
-						}
-#else
 						sprintf (&myQuery[0], "UPDATE account_data set lastip = '%s', lasthwinfo = '%s' WHERE username = '%s'", client->IP_Address, hwinfo, username );
 						mysql_query ( myData, &myQuery[0] );
-#endif
+
 						client->lastTick = (unsigned) servertime;
 						SendB1 (client);
 						SendA0 (client);
@@ -4700,13 +3665,8 @@ void LoginProcessPacket (BANANA* client)
 	unsigned char MDBuffer[17] = {0};
 	unsigned gcn;
 	unsigned ch,connectNum,shipNum;
-#ifdef NO_SQL
-	long long truehwinfo;
-#endif
 	ORANGE* tship;
-#ifndef NO_SQL
 	char security_sixtyfour_binary[18];
-#endif
 
 
 	/* Only packet we're expecting during the login is 0x93 and 0x05. */
@@ -4725,41 +3685,7 @@ void LoginProcessPacket (BANANA* client)
 			memcpy (&username[0], &client->decryptbuf[0x1C], 17 );
 			memcpy (&password[0], &client->decryptbuf[0x4C], 17 );
 			memset (&hwinfo[0], 0, 18);
-#ifdef NO_SQL
-			*(long long*) &client->hwinfo[0] = *(long long*) &client->decryptbuf[0x84];
-			truehwinfo = *(long long*) &client->decryptbuf[0x84];
-			fail_to_auth = 2; // default fail with wrong username
-			for (ds=0;ds<num_accounts;ds++)
-			{
-				if (!strcmp(&account_data[ds]->username[0], &username[0]))
-				{
-					fail_to_auth = 0;
-					sprintf (&password[strlen(password)], "_%u_salt", account_data[ds]->regtime );
-					MDString ((char*)&password[0], (char*)&MDBuffer[0] );
-					for (ch=0;ch<16;ch++)
-						sprintf (&md5password[ch*2], "%02x", (unsigned char) MDBuffer[ch]);
-					md5password[32] = 0;
-					if (!strcmp(&md5password[0],&account_data[ds]->password[0]))
-					{
-						if (account_data[ds]->isbanned)
-							fail_to_auth = 3;
-						if (!account_data[ds]->isactive)
-							fail_to_auth = 5;
-						if (!fail_to_auth)
-							gcn = account_data[ds]->guildcard;
-						if ((strcmp((char*)&client->decryptbuf[0x8C], PSO_CLIENT_VER_STRING) != 0) || (client->decryptbuf[0x10] != PSO_CLIENT_VER))
-							fail_to_auth = 7;
-						client->isgm = account_data[ds]->isgm;
-					}
-					else
-						fail_to_auth = 2;
-					break;
-				}
-			}
 
-			// DO HW BAN LATER
-
-#else
 			mysql_real_escape_string ( myData, (char*)&hwinfo[0], (const char*) &client->decryptbuf[0x84], 8);
 			memcpy (&client->hwinfo[0], &hwinfo[0], 18);
 
@@ -4818,7 +3744,6 @@ void LoginProcessPacket (BANANA* client)
 			}
 			else
 				fail_to_auth = 1;
-#endif
 
 			switch (fail_to_auth)
 			{
@@ -4860,32 +3785,6 @@ void LoginProcessPacket (BANANA* client)
 
 				// Nom, nom, nom.
 
-#ifdef NO_SQL
-				free_record = -1;
-				new_record = 1;
-				for (ds=0;ds<num_security;ds++)
-				{
-					if (security_data[ds]->guildcard == gcn)
-						security_data[ds]->guildcard = 0;
-					UpdateDataFile ("security.dat", ds, security_data[ds], sizeof (L_SECURITY_DATA), 0);
-					if (security_data[ds]->guildcard == 0)
-					{
-						free_record = ds;
-						new_record = 0;
-					}
-				}
-				if (new_record)
-				{
-					free_record = num_security++;
-					security_data[free_record] = (st_security_data*) malloc ( sizeof (L_SECURITY_DATA) );
-				}
-				security_data[free_record]->guildcard = gcn;
-				security_data[free_record]->thirtytwo = 0;
-				security_data[free_record]->sixtyfour = security_sixtyfour_check;
-				security_data[free_record]->isgm = client->isgm;
-				security_data[free_record]->slotnum = -1;
-				UpdateDataFile ("security.dat", free_record, security_data[free_record], sizeof (L_SECURITY_DATA), new_record);
-#else
 				sprintf (&myQuery[0], "DELETE from security_data WHERE guildcard = '%u'", gcn );
 				mysql_query ( myData, &myQuery[0] );
 				mysql_real_escape_string ( myData, &security_sixtyfour_binary[0], (char*) &security_sixtyfour_check, 8);
