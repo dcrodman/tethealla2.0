@@ -53,6 +53,9 @@ extern "C" {
 #define LOGIN_COMPILED_MAX_CONNECTIONS 300
 #define SHIP_COMPILED_MAX_CONNECTIONS 50
 
+const int BACKLOG = 10;
+const char *SHIP_PORT = "3455";
+
 #define MAX_EB02 800000
 #define SERVER_VERSION "0.048"
 #define MAX_ACCOUNTS 2000
@@ -215,7 +218,8 @@ char *mySQL_Username;
 char *mySQL_Password;
 char *mySQL_Database;
 unsigned int mySQL_Port;
-unsigned char serverIP[4];
+unsigned char serverIPN[4]; // network-presentation of the IP
+char* serverIP;
 unsigned short serverPort;
 int override_on = 0;
 unsigned char overrideIP[4];
@@ -782,6 +786,7 @@ int load_config() {
         return -1;
     }
 
+    inet_pton(AF_INET, serverIP, serverIPN);
     globalName = atoi(global_color);
     localName = atoi(global_color);
     normalName = atoi(normal_color);
@@ -3795,12 +3800,11 @@ void LoginProcessPacket (BANANA* client)
 					client->todc = 1;
 					return;
 				}
-#endif
 
 				cipher_ptr = &client->server_cipher;
 				encryptcopy (client, &client->encryptbuf[0], sizeof (PacketE6));
 
-				Send19 (serverIP[0], serverIP[1], serverIP[2], serverIP[3], serverPort+1, client );
+				Send19 (serverIPN[0], serverIPN[1], serverIPN[2], serverIPN[3], serverPort+1, client );
 				for (ch=0;ch<MAX_DRESS_FLAGS;ch++)
 				{
 					if ((dress_flags[ch].guildcard == gcn) || ((unsigned) servertime - dress_flags[ch].flagtime > DRESS_FLAG_EXPIRY))
@@ -4034,6 +4038,66 @@ inline int max(int a, int b) {
     return a > b ? a : b;
 }
 
+void handle_connections() {
+
+}
+
+/* Create and open a server socket to start listening on a particular port.
+ Args:
+ port: Port on which to listen.
+ hints: Populated struct for getaddrinfo.
+ */
+int create_socket(const char* port, const addrinfo *hints) {
+    char c;
+    int status = 0, sockfd;
+    addrinfo *server;
+
+    if ((status = getaddrinfo(serverIP, port, hints, &server)) != 0) {
+        printf("getaddrinfo(): %s\n", gai_strerror(status));
+        printf("Press any key to exit.\n");
+        gets(&c);
+        exit(1);
+    }
+
+    if ((sockfd = socket(server->ai_family, server->ai_socktype, server->ai_protocol)) == -1) {
+        printf("socket(): ");
+        printf("Press any key to exit.\n");
+        gets(&c);
+        exit(2);
+    }
+
+    // Avoid "Address already in use" condition/error.
+    int yes = 1;
+    setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
+
+    if (bind(sockfd, (sockaddr*)server->ai_addr, server->ai_addrlen) == -1) {
+        close(sockfd);
+        perror("bind");
+        gets(&c);
+        exit(3);
+    }
+
+    if (listen(sockfd, BACKLOG) == -1) {
+        close(sockfd);
+        perror("listen");
+        gets(&c);
+        exit(4);
+    }
+
+    freeaddrinfo(server);
+    return sockfd;
+}
+
+void print_programinfo() {
+    printf ("\nTethealla Login Server version %s  Copyright (C) 2008  Terry Chatman Jr.\n", SERVER_VERSION);
+	printf ("-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-\n");
+	printf ("This program comes with ABSOLUTELY NO WARRANTY; for details\n");
+	printf ("see section 15 in gpl-3.0.txt\n");
+    printf ("This is free software, and you are welcome to redistribute it\n");
+    printf ("under certain conditions; see gpl-3.0.txt for details.\n");
+	printf ("\n\n");
+}
+
 /********************************************************
 **
 **		main  :-
@@ -4042,15 +4106,14 @@ inline int max(int a, int b) {
 
 int main( int argc, char * argv[] ) {
 	unsigned ch,ch2;
-	struct in_addr login_in;
-	struct in_addr character_in;
-	struct in_addr ship_in;
 	struct sockaddr_in listen_in;
 	unsigned listen_length;
 	int login_sockfd = -1, character_sockfd = -1, ship_sockfd = -1;
 	int pkt_len, pkt_c, bytes_sent;
 	unsigned short this_packet;
 	unsigned ship_this_packet;
+
+    print_programinfo();
 
     timeval select_timeout = {
         0,
@@ -4061,20 +4124,10 @@ int main( int argc, char * argv[] ) {
 	unsigned connectNum, shipNum;
 
 	dp[0] = 0;
-
 	memset (&dp[0], 0, sizeof (dp));
 
-	printf ("\nTethealla Login Server version %s  Copyright (C) 2008  Terry Chatman Jr.\n", SERVER_VERSION);
-	printf ("-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-\n");
-	printf ("This program comes with ABSOLUTELY NO WARRANTY; for details\n");
-	printf ("see section 15 in gpl-3.0.txt\n");
-    printf ("This is free software, and you are welcome to redistribute it\n");
-    printf ("under certain conditions; see gpl-3.0.txt for details.\n");
-
-	printf ("\n\n");
 
 	srand ( (unsigned) time(NULL) );
-
 	memset ( &dress_flags[0], 0, sizeof (DRESSFLAG) * MAX_DRESS_FLAGS);
 
 	printf ("Loading configuration from %s...", CFG_NAME);
@@ -4148,7 +4201,7 @@ int main( int argc, char * argv[] ) {
 	printf ("///////////////////////\n");
 	if (override_on)
 		printf ("NOTE: IP override feature is turned on.\nThe server will bind to %u.%u.%u.%u but will send out the IP listed below.\n", overrideIP[0], overrideIP[1], overrideIP[2], overrideIP[3] );
-	printf ("IP: %u.%u.%u.%u\n", serverIP[0], serverIP[1], serverIP[2], serverIP[3] );
+	printf ("IP: %s\n",  serverIP);
 	printf ("Login Port: %u\n", serverPort );
 	printf ("Character Port: %u\n", serverPort+1 );
 	printf ("Maximum Connections: %u\n", serverMaxConnections );
@@ -4258,52 +4311,24 @@ int main( int argc, char * argv[] ) {
 	printf (" OK!\n");
 
 	/* Open the PSO BB Login Server Port... */
+    char port[5];
+    addrinfo hints;
+    hints.ai_flags = AI_NUMERICHOST;
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
 
-	printf ("Opening server login port %u for connections.\n", serverPort);
+    sprintf(port, "%d", serverPort);
+    printf ("Opening server login port %s for connections.\n", port);
+	login_sockfd = create_socket(port, &hints);
 
-#ifdef USEADDR_ANY
-	login_in.s_addr = INADDR_ANY;
-#else
-	if (override_on)
-		*(unsigned *) &login_in.s_addr = *(unsigned *) &overrideIP[0];
-	else
-		*(unsigned *) &login_in.s_addr = *(unsigned *) &serverIP[0];
-#endif
-	login_sockfd = tcp_sock_open( login_in, serverPort );
+    sprintf(port, "%d", serverPort + 1);
+    printf ("Opening server character port %s for connections.\n", port);
+    character_sockfd = create_socket(port, &hints);
 
-	tcp_listen (login_sockfd);
-
-	/* Open the PSO BB Character Server Port... */
-
-	printf ("Opening server character port %u for connections.\n", serverPort + 1);
-
-#ifdef USEADDR_ANY
-	character_in.s_addr = INADDR_ANY;
-#else
-	if (override_on)
-		*(unsigned *) &character_in.s_addr = *(unsigned*) &overrideIP[0]; 
-	else
-		*(unsigned *) &character_in.s_addr = *(unsigned *) &serverIP[0];
-#endif
-	character_sockfd = tcp_sock_open( character_in, serverPort + 1 );
-
-	tcp_listen (character_sockfd);
-
-	/* Open the Ship Port... */
-
-	printf ("Opening ship port 3455 for connections.\n" );
-
-#ifdef USEADDR_ANY
-	ship_in.s_addr = INADDR_ANY;
-#else
-	if (override_on)
-		*(unsigned *) &ship_in.s_addr = *(unsigned *) &overrideIP[0];
-	else
-		*(unsigned *) &ship_in.s_addr = *(unsigned *) &serverIP[0];
-#endif
-	ship_sockfd = tcp_sock_open( ship_in, 3455 );
-
-	tcp_listen (ship_sockfd);
+    sprintf(port, "%s", SHIP_PORT);
+    printf ("Opening ship port 3455 for connections.\n");
+    ship_sockfd = create_socket(port, &hints);
 
 	if ((login_sockfd<0) || (character_sockfd<0) || (ship_sockfd<0))
 	{
