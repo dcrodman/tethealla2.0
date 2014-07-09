@@ -514,11 +514,37 @@ void decryptcopy (unsigned char* dest, const unsigned char* src, unsigned size);
 void compressShipPacket ( ORANGE* ship, unsigned char* src, unsigned long src_size );
 void decompressShipPacket ( ORANGE* ship, unsigned char* dest, unsigned char* src );
 
+/* Send the amount of data specified by len from the client's buffered to the client.
+ Returns -1 on error and 0 on success. */
+int send_to_client(BANANA *client, int len) {
+
+    int total = 0, remaining = len;
+    int bytes_sent;
+
+    printf("Send_to_client %s\n", client->IP_Address);
+    print_payload(client->sndbuf, len);
+    printf("\n");
+
+    while (total < len) {
+        bytes_sent = send(client->plySockfd, client->sndbuf + total, remaining, 0);
+        if (bytes_sent == -1) {
+            perror("send");
+            return false;
+        }
+        total += bytes_sent;
+        remaining -= bytes_sent;
+    }
+
+    memmove(client->sndbuf, client->sndbuf + total, total);
+    client->snddata -= total;
+
+    return 0;
+}
 
 void debug_perror( char * msg ) {
 	debug( "%s : %s\n" , msg , strerror(errno) );
 }
-/*****************************************************************************/
+
 void debug(char *fmt, ...)
 {
 #define MAX_MESG_LEN 1024
@@ -531,33 +557,6 @@ void debug(char *fmt, ...)
 	va_end (args);
 
 	fprintf( stderr, "%s", text);
-}
-
-void WriteLog(char *fmt, ...)
-{
-#define MAX_GM_MESG_LEN 4096
-
-	va_list args;
-	char text[ MAX_GM_MESG_LEN], *ptime;
-	time_t rawtime;
-	FILE *fp;
-
-    time(&rawtime);
-    ptime = ctime(&rawtime);
-	va_start (args, fmt);
-	strcpy (text + vsprintf( text,fmt,args), "\r\n"); 
-	va_end (args);
-
-	fp = fopen ( "login.log", "a");
-	if (!fp)
-	{
-		printf ("Unable to log to login.log\n");
-	}
-
-	fprintf (fp, "[%s] %s", ptime, text);
-	fclose (fp);
-
-	printf ("[%s] %s", ptime, text);
 }
 
 /* Computes the message digest for string inString.
@@ -4622,11 +4621,9 @@ int main( int argc, char * argv[] ) {
 					{
 						// We should only get here if we know that we have data to send.
 
-                        printf("Sending packet\n");
-                        print_payload(&workConnect->sndbuf[workConnect->sndwritten],workConnect->snddata-workConnect->sndwritten);
-
-						bytes_sent = send (workConnect->plySockfd, &workConnect->sndbuf[workConnect->sndwritten],
-							workConnect->snddata - workConnect->sndwritten, 0);
+						//bytes_sent = send (workConnect->plySockfd, &workConnect->sndbuf[workConnect->sndwritten],
+						//	workConnect->snddata - workConnect->sndwritten, 0);
+                        bytes_sent = send_to_client(workConnect, workConnect->snddata);
 						if (bytes_sent == -1) {
 							printf ("Could not send data to client...\n");
 							initialize_connection (workConnect);							

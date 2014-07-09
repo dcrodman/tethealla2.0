@@ -17,7 +17,7 @@
 #define LE32(x) x
 #endif
 
-#define BB_LOGIN_WELCOME_TYPE 0x003
+#define BB_LOGIN_WELCOME_TYPE 0x0003
 #define BB_LOGIN_WELCOME_SZ 0x00C8
 
 const char BB_COPYRIGHT[] = "Phantasy Star Online Blue Burst Game Server. Copyright 1999-2004 SONICTEAM.";
@@ -32,8 +32,7 @@ struct bb_packet_header {
 /* Login welcome packet.*/
 struct bb_login_welcome_pkt {
     bb_packet_header header;
-    char copyright[75];
-    char message[19];
+    char copyright[96];
     uint8_t server_vector[48];
     uint8_t client_vector[48];
 };
