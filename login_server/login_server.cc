@@ -954,12 +954,13 @@ void start_encryption(BANANA* connect)
 			initialize_connection (workConnect);
 		}
 	}
-    uint8_t server_seed[48];
-    uint8_t client_seed[48];
+
+    uint8_t server_seed[48], client_seed[48];
     for (int i = 0; i < 48; i++) {
         server_seed[i] = dist(rand_gen);
         client_seed[i] = dist(rand_gen);
     }
+    print_payload(client_seed, 48);
     CRYPT_CreateKeys(&connect->server_cipher, server_seed, CRYPT_BLUEBURST);
     CRYPT_CreateKeys(&connect->client_cipher, client_seed, CRYPT_BLUEBURST);
 
@@ -4550,13 +4551,7 @@ int main( int argc, char * argv[] ) {
 
 									//cipher_ptr = &workConnect->client_cipher;
 
-                                    memcpy(&workConnect->peekbuf, &workConnect->rcvbuf, 8);
-                                    CRYPT_CryptData(&workConnect->client_cipher, &workConnect->peekbuf, 8, 0);
-
-                                    printf("Header\n");
-                                    print_payload(workConnect->peekbuf, 8);
-                                    printf("\n");
-									//decryptcopy ( &workConnect->peekbuf[0], &workConnect->rcvbuf[0], 8 );
+                                    decryptcopy ( workConnect->peekbuf, workConnect->rcvbuf, 8 );
 
 									/* Make sure we're expecting a multiple of 8 bytes. */
 
@@ -4996,7 +4991,8 @@ void encryptcopy (BANANA* client, const unsigned char* src, unsigned size)
 		while (size % 8)
 			dest[size++] = 0x00;
 		client->snddata += (int) size;
-		pso_crypt_encrypt_bb(cipher_ptr,dest,size);
+		//pso_crypt_encrypt_bb(cipher_ptr,dest,size);
+        CRYPT_CryptData(&workConnect->server_cipher, dest, size, 1);
 	}
 }
 
@@ -5004,7 +5000,10 @@ void encryptcopy (BANANA* client, const unsigned char* src, unsigned size)
 void decryptcopy (unsigned char* dest, const unsigned char* src, unsigned size)
 {
 	memcpy (dest,src,size);
-	pso_crypt_decrypt_bb(cipher_ptr,dest,size);
+    CRYPT_CryptData(&workConnect->client_cipher, dest, size, 0);
+    //pso_crypt_decrypt_bb(cipher_ptr,dest,size);
+    printf("Received from client %s\n", workConnect->IP_Address);
+    print_payload(dest, size);
 }
 
 
