@@ -30,6 +30,7 @@
 #include <cctype>
 #include <cerrno>
 #include <random>
+#include <list>
 
 #include <sys/time.h>
 #include <arpa/inet.h>
@@ -104,6 +105,9 @@ const char *LOCAL_DIR = "/usr/local/share/tethealla/config/";
 
 static std::mt19937 rand_gen(time(NULL));
 static std::uniform_int_distribution<uint8_t> dist(0, 255);
+
+std::list<BANANA*> client_connections;
+std::list<ORANGE*> ship_connections;
 
 /* functions */
 
@@ -3938,8 +3942,113 @@ inline int max(int a, int b) {
     return a > b ? a : b;
 }
 
-void handle_connections() {
+void handle_connections(int loginfd, int charfd, int shipfd) {
+    int select_result = 0;
+    fd_set readfds, writefds, exceptfds;
+    int fd_max = 0;
+    std::list<BANANA*>::const_iterator c, c_end;
+    std::list<ORANGE*>::const_iterator s, s_end;
+    timeval timeout = { .tv_sec = 10 };
 
+    while (1) {
+        FD_ZERO(&readfds);
+        FD_ZERO(&writefds);
+        FD_ZERO(&exceptfds);
+
+        // Add our clients to the apropriate fd sets.
+        for (c = client_connections.begin(), c_end = client_connections.end(); c != c_end; ++c) {
+            FD_SET((*c)->plySockfd, &readfds);
+            FD_SET((*c)->plySockfd, &exceptfds);
+
+            // Only add the client to writefds if we have something to send.
+            if ((*c)->snddata - (*c)->sndwritten)
+                FD_SET((*c)->plySockfd, &writefds);
+
+            fd_max = max(fd_max, (*c)->plySockfd);
+        }
+
+        // Add our ships to the apropriate fd sets.
+        for (s = ship_connections.begin(), s_end = ship_connections.end(); s != s_end; ++c) {
+            // Send a ping request to the ship when 30 seconds passes...
+            if (((unsigned) servertime - workShip->last_ping >= 30) && (workShip->sent_ping == 0)) {
+                workShip->sent_ping = 1;
+                ShipSend11 (workShip);
+            }
+
+            // If it's been over a minute since we've heard from a ship, terminate
+            // the connection with it.
+            if ((unsigned) servertime - workShip->last_ping > 60) {
+                printf ("%s ship ping timeout.\n", workShip->name );
+                // TODO: Kill the ship
+                continue;
+            }
+
+            FD_SET((*s)->shipSockfd, &readfds);
+            FD_SET((*s)->shipSockfd, &exceptfds);
+            if ((*s)->snddata - (*s)->sndwritten)
+                FD_SET((*s)->shipSockfd, &writefds);
+
+            fd_max = max(fd_max, (*s)->shipSockfd);
+        }
+
+        FD_SET(loginfd, &readfds);
+        fd_max = max(fd_max, loginfd);
+        FD_SET(charfd, &readfds);
+        fd_max = max(fd_max, charfd);
+        FD_SET(shipfd, &readfds);
+        fd_max = max(fd_max, shipfd);
+
+        if ((select_result = select(fd_max + 1, &readfds, &writefds, &exceptfds, &timeout)) > 0) {
+            // Check our always-listening sockets first.
+            if (FD_ISSET(loginfd, &readfds)) {
+                // TODO: Create new login connection and start encryption
+            }
+
+            if (FD_ISSET(charfd, &readfds)) {
+                // TODO: Create new character connection and start encryption.
+            }
+
+            if (FD_ISSET(shipfd, &readfds)) {
+                // TODO: Create new ship connection and start encryption.
+            }
+
+            // Check our connected clients for activity.
+            for (c = client_connections.begin(), c_end = client_connections.end(); c != c_end; ++c) {
+                if (FD_ISSET((*c)->plySockfd, &readfds)) {
+                    // TODO: Read data from the client
+                }
+
+                if (FD_ISSET((*c)->plySockfd, &writefds)) {
+                    // TODO: Send whatever data we have to the client.
+                }
+
+                if (FD_ISSET((*c)->plySockfd, &exceptfds)) {
+                    // TODO: Remove the client.
+                }
+            }
+
+            // Check our connected ships.
+            for (s = ship_connections.begin(), s_end = ship_connections.end(); s != s_end; ++c) {
+                if (FD_ISSET((*s)->shipSockfd, &readfds)) {
+                    // TODO: Read data from the ship.
+                }
+
+                if (FD_ISSET((*s)->shipSockfd, &writefds)) {
+                    // TODO: Send data to the ship.
+                }
+
+                if (FD_ISSET((*s)->shipSockfd, &exceptfds)) {
+                    // TODO: Remove the ship
+                }
+            }
+
+        } else if (select_result == -1) {
+            perror("select");
+            exit(1);
+        } else {
+            // Timed out
+        }
+    }
 }
 
 /* Create and open a server socket to start listening on a particular port.
