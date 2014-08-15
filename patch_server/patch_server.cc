@@ -431,7 +431,7 @@ void handle_connections(int patchfd, int datafd) {
                 fd_max = (*c)->socket;
         }
 
-        if ((select_result = select(fd_max + 1, &readfds, &writefds, &exceptfds, &timeout))) {
+        if ((select_result = select(fd_max + 1, &readfds, &writefds, &exceptfds, &timeout)) > 0) {
             // Check the sockets listening for new connections.
             if (FD_ISSET(patchfd, &readfds)) {
                 // New connection to PATCH port
