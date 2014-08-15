@@ -8,6 +8,7 @@ extern "C" {
 }
 
 #define TCP_BUFFER_SIZE 64000
+#define PACKET_BUFFER_SIZE ( TCP_BUFFER_SIZE * 16 )
 #define MAX_SENDCHECK 0x0B
 
 const char Message03[] = { "Tethealla Gate v.047" };
@@ -48,5 +49,46 @@ typedef struct st_banana {
 	int dress_flag;
 	unsigned connection_index; // corresponds to index in connection list
 } BANANA;
+
+/* a RC4 expanded key session */
+struct rc4_key {
+    unsigned char state[256];
+    unsigned x, y;
+};
+
+/* Ship Structure */
+
+typedef struct st_orange {
+	int shipSockfd;
+	unsigned char name[13];
+	unsigned playerCount;
+	unsigned char shipAddr[5];
+	unsigned char listenedAddr[4];
+	unsigned short shipPort;
+	unsigned char rcvbuf [TCP_BUFFER_SIZE];
+	unsigned long rcvread;
+	unsigned long expect;
+	unsigned char decryptbuf [TCP_BUFFER_SIZE];
+	unsigned char sndbuf [PACKET_BUFFER_SIZE];
+	unsigned char encryptbuf [TCP_BUFFER_SIZE];
+	unsigned char packet [PACKET_BUFFER_SIZE];
+	unsigned long packetread;
+	unsigned long packetdata;
+	int snddata,
+    sndwritten;
+	unsigned shipID;
+	int authed;
+	int todc;
+	int crypt_on;
+	unsigned char user_key[128];
+	int key_change[128];
+	unsigned key_index;
+	struct rc4_key cs_key; // Encryption keys
+	struct rc4_key sc_key; // Encryption keys
+	unsigned connection_index;
+	unsigned connected;
+	unsigned last_ping;
+	int sent_ping;
+} ORANGE;
 
 #endif
