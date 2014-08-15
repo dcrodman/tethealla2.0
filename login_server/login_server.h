@@ -13,11 +13,16 @@ extern "C" {
 
 const char Message03[] = { "Tethealla Gate v.047" };
 
+enum server_type {
+    LOGIN,
+    CHARACTER
+};
+
 /* Player Structure */
 
 typedef struct st_banana {
 	int plySockfd;  // client's socket fd
-	int login;  // are we connected to LOGIN or CHARACTER?
+	server_type session;  // are we connected to LOGIN or CHARACTER?
 	unsigned char peekbuf[8];   // decrypted header
 	unsigned char rcvbuf [TCP_BUFFER_SIZE]; // intermediate rcv buffer?
 	unsigned short rcvread; // how much data is in rcvbuf
@@ -44,6 +49,8 @@ typedef struct st_banana {
 	unsigned char sendCheck[MAX_SENDCHECK+2];
 	int todc; // this this client about to be disconnected?
 	unsigned char IP_Address[16];
+    int port;
+    bool ipv6;
 	char hwinfo[18];
 	int isgm;
 	int dress_flag;

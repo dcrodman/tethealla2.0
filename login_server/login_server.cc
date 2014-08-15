@@ -814,7 +814,6 @@ void initialize_connection (BANANA* connect)
 	}
 	memset (connect, 0, sizeof (BANANA));
 	connect->plySockfd = -1;
-	connect->login = -1;
 	connect->lastTick = 0xFFFFFFFF;
 	connect->connected = 0xFFFFFFFF;
 }
@@ -903,11 +902,6 @@ void start_encryption(BANANA* connect)
     CRYPT_CreateKeys(&connect->client_cipher, client_seed, CRYPT_BLUEBURST);
 
     send_bb_login_welcome(connect, server_seed, client_seed);
-    connect->connected = (unsigned) servertime;
-
-    // TODO: Can these be ditched?
-	connect->crypt_on = 1;
-	connect->sendCheck[SEND_PACKET_03] = 1;
 }
 
 void SendB1 (BANANA* client) {
@@ -3938,6 +3932,53 @@ void LoadDropData()
 	}
 }
 
+BANANA* accept_client(int sockfd, server_type stype) {
+    sockaddr_storage clientaddr;
+    socklen_t addrsize = sizeof clientaddr;
+
+    int clientfd;
+    if ((clientfd = accept(sockfd, (struct sockaddr*) &clientaddr, &addrsize)) == -1) {
+        perror("accept_client");
+        return NULL;
+    }
+
+    BANANA* client = (BANANA*) malloc(sizeof(BANANA*));
+    client->plySockfd = clientfd;
+    client->session = stype;
+
+    // IPv6?
+    if (clientaddr.ss_family == AF_INET) {
+        sockaddr_in* ip = ((sockaddr_in*)&clientaddr);
+        client->port = ip->sin_port;
+        client->ipv6 = false;
+
+        memcpy(client->IP_Address,inet_ntoa(ip->sin_addr), 16);
+        //inet_ntop(AF_INET, &(ip->sin_addr), client->ip_addr_str, INET_ADDRSTRLEN);
+    }
+    /* TODO: IPv6 support
+    else {
+        sockaddr_in6* ip = ((sockaddr_in6*)&clientaddr);
+        client->port = ip->sin6_port;
+        client->ipv6 = true;
+
+        client->ip_addr_str = (char*) malloc(INET6_ADDRSTRLEN);
+        inet_ntop(AF_INET6, &(ip->sin6_addr), client->ip_addr_str, INET6_ADDRSTRLEN);
+    }
+    */
+
+    // Send them the welcome packet. If this fails for some reason then we
+    // aren't able to proceed, so bail.
+    start_encryption(client);
+
+    client->connected = (unsigned) servertime;
+    // TODO: Can these be ditched?
+	client->crypt_on = 1;
+	client->sendCheck[SEND_PACKET_03] = 1;
+
+    client_connections.push_back(client);
+    return client;
+}
+
 inline int max(int a, int b) {
     return a > b ? a : b;
 }
@@ -4001,11 +4042,15 @@ void handle_connections(int loginfd, int charfd, int shipfd) {
         if ((select_result = select(fd_max + 1, &readfds, &writefds, &exceptfds, &timeout)) > 0) {
             // Check our always-listening sockets first.
             if (FD_ISSET(loginfd, &readfds)) {
-                // TODO: Create new login connection and start encryption
+                BANANA* client = accept_client(loginfd, LOGIN);
+                if (client)
+                    printf("Accepted LOGIN connection from %s:%d", client->IP_Address, client->port);
             }
 
             if (FD_ISSET(charfd, &readfds)) {
-                // TODO: Create new character connection and start encryption.
+                BANANA* client = accept_client(charfd, CHARACTER);
+                if (client)
+                    printf("Accepted CHARACTER connection from %s:%d", client->IP_Address, client->port);
             }
 
             if (FD_ISSET(shipfd, &readfds)) {
@@ -4378,13 +4423,13 @@ int main( int argc, char * argv[] ) {
 					memcpy (&workConnect->decryptbuf[0], &workConnect->packet[workConnect->packetread], this_packet);
 
                     // Transfer off to the handler for whichever the sever the client is connected.
-					switch (workConnect->login)
+					switch (workConnect->session)
 					{
-					case 0x01:
+					case LOGIN:
 						// Login server
 						LoginProcessPacket (workConnect);
 						break;
-					case 0x02:
+					case CHARACTER:
 						// Character server
 						CharacterProcessPacket (workConnect);
 						break;
@@ -4515,7 +4560,7 @@ int main( int argc, char * argv[] ) {
 						printf ("Accepted LOGIN connection from %s:%u\n", workConnect->IP_Address, listen_in.sin_port );
 						start_encryption (workConnect);
 						/* Doin' login process... */
-						workConnect->login = 1;
+						//workConnect->login = 1;
 					}
 				}
 			}
@@ -4536,7 +4581,7 @@ int main( int argc, char * argv[] ) {
 						printf ("Accepted CHARACTER connection from %s:%u\n", inet_ntoa (listen_in.sin_addr), listen_in.sin_port );
 						start_encryption (workConnect);
 						/* Doin' character process... */
-						workConnect->login = 2;
+						//workConnect->login = 2;
 					}
 				}
 			}

@@ -24,6 +24,6 @@ int send_bb_login_welcome(BANANA* client, uint8_t s_seed[48], uint8_t c_seed[48]
     print_payload((unsigned char*)pkt, BB_LOGIN_WELCOME_SZ);
     printf("\n");
 
-    // Send it?
+    // TODO: Send the packet since we can't proceed without this.
     return 0;
 }
