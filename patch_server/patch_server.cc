@@ -190,7 +190,9 @@ int handle_client_list_done(patch_client *client) {
     return 0;
 }
 
-/* Process a client packet sent to the PATCH server. */
+/* Process a client packet sent to the PATCH server. Returns 1 (true) on
+ success, 0 on error and -1 if the handler received an unrecognized
+ packet type. */
 int patch_process_packet(patch_client *client) {
     packet_hdr *header = (packet_hdr*) client->recv_buffer;
     header->pkt_type = LE16(header->pkt_type);
@@ -204,19 +206,19 @@ int patch_process_packet(patch_client *client) {
         case PATCH_LOGIN:
             result = send_welcome_message(client, header,
                     server_config->welcome_message, server_config->welcome_size);
-            if (!result)
-                return -1;
-            result = send_redirect(client,
-                    server_config->serverIP,
-                    htons(atoi(server_config->data_port)));
+            if (result)
+                result = send_redirect(client,
+                        server_config->serverIP,
+                        htons(atoi(server_config->data_port)));
             break;
         default:
-            return -2;
+            return -1;
     }
     return result;
 }
 
-/* Process a client packet sent to the DATA server. */
+/* Process a client packet sent to the DATA server. Returns 1 on success, 0
+ on error and -1 if the handler received an unrecognized packet type. */
 int data_process_packet(patch_client *client) {
     packet_hdr *header = (packet_hdr*) client->recv_buffer;
     header->pkt_type = LE16(header->pkt_type);
@@ -228,8 +230,7 @@ int data_process_packet(patch_client *client) {
             result = send_welcome_ack(client);
             break;
         case PATCH_LOGIN:
-            result = send_data_ack(client) +
-            send_file_list(client);
+            result = send_data_ack(client) && send_file_list(client);
             break;
         case CLIENT_FILE_STATUS:
             result = handle_file_check(client);
@@ -238,7 +239,7 @@ int data_process_packet(patch_client *client) {
             result = handle_client_list_done(client);
             break;
         default:
-            result = 0;
+            result = -1;
             break;
     }
     return result;
