@@ -124,8 +124,10 @@ int send_file_list(patch_client* client) {
     return 0;
 }
 
-/* Check to see if we have any files to send the client. Returns 0 if not,
- -1 on error or 1 if data was sent successfully. */
+/* Check to see if we have any files to send the client and, if so, send the
+ appropriate number of chdir and file chunk packets until the list is complete,
+ at which point the file list done packet will be sent. Returns 0 when there
+ are no more files to send and -1 on error. */
 int sending_client_file(patch_client *client) {
     if (!client->sending_files)
         return 0;
@@ -166,7 +168,7 @@ int sending_client_file(patch_client *client) {
         client->cur_chunk = client->patch_sent = 0;
         client->patch_list->pop_back();
     }
-    return 1;
+    return 0;
 }
 
 /* Figure out whether we need to send any files to the client. If so, build up the
@@ -753,4 +755,3 @@ int main(int argc, const char * argv[]) {
 
     return 0;
 }
-
