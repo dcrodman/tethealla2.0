@@ -261,7 +261,7 @@ int receive_from_client(patch_client *client) {
             perror("recv");
 
         if (bytes <= 0)
-            // Disconnect on error or if the client explicitly closed the connection.
+            // Indicate an error or a disconnect, respectively.
             return (bytes == -1) ? -1 : 1;
         if (client->recv_size < 4)
             // Wait for the client to send us more data since we don't have a header yet.
@@ -274,7 +274,7 @@ int receive_from_client(patch_client *client) {
         header = (packet_hdr*) client->recv_buffer;
         client->packet_sz = header->pkt_len;
 
-        // Skip ahead if all we got is a 4 byte header.
+        // Skip ahead if all we got is a 4 byte header since there's nothing left to recv.
         if (client->packet_sz == 4)
             goto handle;
     }
@@ -289,8 +289,8 @@ int receive_from_client(patch_client *client) {
     if (bytes <= 0)
         return (bytes == -1) ? -1 : 1;
 
+    // Make sure we have the entire packet. If not, wait for the client to send the rest.
     if (client->recv_size < client->packet_sz)
-        // Wait until we get the rest of the packet.
         return 0;
 
     // By now we've received the whole packet.
