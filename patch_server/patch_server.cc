@@ -335,13 +335,14 @@ void destory_client(patch_client* client) {
 patch_client* accept_client(int sockfd) {
     sockaddr_storage clientaddr;
     socklen_t addrsize = sizeof clientaddr;
-    patch_client* client = (patch_client*) malloc(sizeof(patch_client));
     
     int clientfd;
     if ((clientfd = accept(sockfd, (struct sockaddr*) &clientaddr, &addrsize)) == -1) {
         perror("accept_client");
         return NULL;
     }
+
+    patch_client* client = (patch_client*) malloc(sizeof(patch_client));
     client->socket = clientfd;
     client->disconnected = false;
     client->patch_list = new std::list<patch_file*>;
