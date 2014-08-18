@@ -36,8 +36,9 @@ extern "C" {
 }
 
 /* Send the packet from the client's send buffer to the client. Will try
- until the entire packet is sent. Len indicates the total number of bytes
- that will be sent. */
+ until the entire packet is sent or an error occurs. Len indicates the
+ total number of bytes that will be sent and the client's send_size will
+ be recued by len. */
 bool send_packet(patch_client *client, int len) {
     int total = 0, remaining = len;
     int bytes_sent;
@@ -65,13 +66,8 @@ bool send_header(patch_client* client, int type) {
     header->pkt_len = LE16(PATCH_HEADER_LEN);
     client->send_size += PATCH_HEADER_LEN;
 
-#ifdef DEBUGGING
-        print_payload(client->send_buffer, PATCH_HEADER_LEN);
-        printf("\n");
-#endif
-
     CRYPT_CryptData(&client->server_cipher, client->send_buffer, PATCH_HEADER_LEN, 1);
-   return  send_packet(client, PATCH_HEADER_LEN);
+    return  send_packet(client, PATCH_HEADER_LEN);
 }
 
 /* Send the BB welcome packet. */
@@ -88,11 +84,7 @@ bool send_welcome(patch_client* client, uint32_t cvector, uint32_t svector) {
     client->send_size += PATCH_WELCOME_LENGTH;
     memcpy(client->send_buffer, &w_pkt, PATCH_WELCOME_LENGTH);
 
-    if (!send_packet(client, PATCH_WELCOME_LENGTH)) {
-        perror("send");
-        return false;
-    }
-    return true;
+    return send_packet(client, PATCH_WELCOME_LENGTH);
 }
 
 /* Simple 4-byte acknowledgement from the server upon receipt of the client's
