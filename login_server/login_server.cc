@@ -3932,6 +3932,88 @@ void LoadDropData()
 	}
 }
 
+int login_process_packet(BANANA* client) {
+    return 0;
+}
+
+int character_process_packet(BANANA* client) {
+    return 0;
+}
+
+/* Read in whatever a client is trying to send us and store it in their
+ respective receiving buffer and pass it along to the packet handler for
+ a response. Returns 0 on successful read, -1 on error, or 1 if the client
+ closed the connection. */
+int receive_from_client(BANANA *client) {
+    bb_packet_header *header;
+    ssize_t bytes = 0;
+
+    if (client->recv_size < 4) {
+        // Start by reading in the packet's header.
+        bytes = recv(client->plySockfd, client->recv_buffer, 4 - client->recv_size, 0);
+        client->recv_size += (int) bytes;
+        if (bytes == -1)
+            perror("recv");
+
+        if (bytes <= 0)
+            // Disconnect on error or if the client explicitly closed the connection.
+            return (bytes == -1) ? -1 : 1;
+        if (client->recv_size < 4)
+            // Wait for the client to send us more data since we don't have a header yet.
+            return 0;
+    }
+
+    if (!client->packet_sz) {
+        // Decrypt our header since we have all of it by now.
+        CRYPT_CryptData(&client->client_cipher, client->recv_buffer, 4, 0);
+        header = (bb_packet_header*) client->recv_buffer;
+        client->packet_sz = header->length;
+
+        // Skip ahead if all we got is a 4 byte header.
+        if (client->packet_sz == 4)
+            goto handle;
+    }
+
+    // Receive the rest of the packet (or as much as the client was able to send us).
+    bytes = recv(client->plySockfd, client->recv_buffer + client->recv_size,
+                 client->packet_sz - client->recv_size, 0);
+    client->recv_size += bytes;
+
+    if (bytes == -1)
+        perror("recv");
+    if (bytes <= 0)
+        return (bytes == -1) ? -1 : 1;
+
+
+    if (client->recv_size < client->packet_sz)
+        // Wait until we get the rest of the packet.
+        return 0;
+
+    // By now we've received the whole packet.
+    CRYPT_CryptData(&client->client_cipher, client->recv_buffer + 4, client->packet_sz - 4, 0);
+
+handle:
+
+#ifdef DEBUGGING
+    printf("Received %lu bytes from %s\n", bytes + 4, client->IP_Address);
+    print_payload(client->recv_buffer, int(bytes));
+    printf("\n");
+#endif
+
+    if (client->session == LOGIN)
+        login_process_packet(client);
+    else
+        character_process_packet(client);
+
+    // Move the packet out of the recv buffer and reduce the currently received size.
+
+    client->recv_size -= client->packet_sz;
+    memmove(client->recv_buffer, client->recv_buffer + client->packet_sz, client->packet_sz);
+    client->packet_sz = 0;
+
+    return 0;
+}
+
 BANANA* accept_client(int sockfd, server_type stype) {
     sockaddr_storage clientaddr;
     socklen_t addrsize = sizeof clientaddr;
@@ -3946,7 +4028,6 @@ BANANA* accept_client(int sockfd, server_type stype) {
     client->plySockfd = clientfd;
     client->session = stype;
 
-    // IPv6?
     if (clientaddr.ss_family == AF_INET) {
         sockaddr_in* ip = ((sockaddr_in*)&clientaddr);
         client->port = ip->sin_port;
@@ -3968,6 +4049,7 @@ BANANA* accept_client(int sockfd, server_type stype) {
 
     // Send them the welcome packet. If this fails for some reason then we
     // aren't able to proceed, so bail.
+    // TODO: Return NULL if this fails.
     start_encryption(client);
 
     client->connected = (unsigned) servertime;
@@ -4001,6 +4083,9 @@ void handle_connections(int loginfd, int charfd, int shipfd) {
             FD_SET((*c)->plySockfd, &readfds);
             FD_SET((*c)->plySockfd, &exceptfds);
 
+            // TODO: add lastTick stuff
+
+            // TODO: adjust this for new handling in recieve_from_client
             // Only add the client to writefds if we have something to send.
             if ((*c)->snddata - (*c)->sndwritten)
                 FD_SET((*c)->plySockfd, &writefds);
@@ -4546,7 +4631,6 @@ int main( int argc, char * argv[] ) {
 			if (FD_ISSET (login_sockfd, &ReadFDs))
 			{
 				// Someone's attempting to connect to the login server.
-                // TODO: Add client to std::list instead of array.
 				ch = free_connection();
 				if (ch != 0xFFFF)
 				{

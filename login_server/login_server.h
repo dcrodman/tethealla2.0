@@ -23,6 +23,14 @@ enum server_type {
 typedef struct st_banana {
 	int plySockfd;  // client's socket fd
 	server_type session;  // are we connected to LOGIN or CHARACTER?
+
+    unsigned char send_buffer[TCP_BUFFER_SIZE];
+    unsigned int send_size;
+
+    unsigned char recv_buffer[TCP_BUFFER_SIZE];
+    unsigned int recv_size;
+    unsigned int packet_sz;
+
 	unsigned char peekbuf[8];   // decrypted header
 	unsigned char rcvbuf [TCP_BUFFER_SIZE]; // intermediate rcv buffer?
 	unsigned short rcvread; // how much data is in rcvbuf
