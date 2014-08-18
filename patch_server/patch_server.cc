@@ -556,12 +556,13 @@ int load_patches(const char* dirname) {
                 patch_entry->file_size = ftell(fd);
                 fseek(fd, 0, SEEK_SET);
 
-                char filebuf[patch_entry->file_size + 1];
+                char *filebuf = (char*) malloc(patch_entry->file_size + 1);
                 fread(filebuf, 1, patch_entry->file_size, fd);
-                fclose(fd);
-
                 patch_entry->checksum = calculate_checksum(filebuf, patch_entry->file_size);
                 patch_entry->index = patch_index++;
+
+                fclose(fd);
+                free(filebuf);
 
                 // Keep track of how far we are into the file hierarchy so that we can tell the
                 // client to change directories more easily. patch_dirs will contain the dir name
