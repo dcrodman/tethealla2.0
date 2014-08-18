@@ -190,9 +190,8 @@ int handle_client_list_done(patch_client *client) {
     return 0;
 }
 
-/* Process a client packet sent to the PATCH server. Returns 1 (true) on
- success, 0 on error and -1 if the handler received an unrecognized
- packet type. */
+/* Process a client packet sent to the PATCH server. Returns 0 on success,
+ 1 on error and -1 if the handler received an unrecognized packet type. */
 int patch_process_packet(patch_client *client) {
     packet_hdr *header = (packet_hdr*) client->recv_buffer;
     header->pkt_type = LE16(header->pkt_type);
@@ -214,10 +213,12 @@ int patch_process_packet(patch_client *client) {
         default:
             return -1;
     }
-    return result;
+    // Invert the value since we're returning 0 on success but the packet
+    // functions all return true (1) on success.
+    return result ? 0 : 1;
 }
 
-/* Process a client packet sent to the DATA server. Returns 1 on success, 0
+/* Process a client packet sent to the DATA server. Returns 0 on success, 1
  on error and -1 if the handler received an unrecognized packet type. */
 int data_process_packet(patch_client *client) {
     packet_hdr *header = (packet_hdr*) client->recv_buffer;
@@ -242,7 +243,7 @@ int data_process_packet(patch_client *client) {
             result = -1;
             break;
     }
-    return result;
+    return result ? 0 : 1;
 }
 
 /* Read in whatever a client is trying to send us and store it in their
@@ -304,18 +305,21 @@ handle:
         printf("\n");
 #endif
 
+    int result = 0;
     if (client->session == PATCH)
-        patch_process_packet(client);
+        result = patch_process_packet(client);
     else
-        data_process_packet(client);
+        result = data_process_packet(client);
 
     // Move the packet out of the recv buffer and reduce the currently received size.
-
     client->recv_size -= client->packet_sz;
     memmove(client->recv_buffer, client->recv_buffer + client->packet_sz, client->packet_sz);
     client->packet_sz = 0;
 
-    return 0;
+    if (result)
+        return -1;
+    else
+        return 0;
 }
 
 /* Close a client socket and free the memory associated with its structure. */
@@ -449,12 +453,13 @@ void handle_connections(int patchfd, int datafd) {
             // Iterate over the connected clients.
             for (c = connections.begin(), end = connections.end(); c != end; ++c) {
                 if (FD_ISSET((*c)->socket, &readfds)) {
-                    if (receive_from_client((*c)) == 1)
+                    // Disconnect on error as well as actual client d/c.
+                    if (receive_from_client((*c)))
                         (*c)->disconnected = true;
                 }
                 // Are we sending the client files?
                 if (FD_ISSET((*c)->socket, &writefds) && !(*c)->disconnected) {
-                    if (sending_client_file(*c) == -1)
+                    if (sending_client_file(*c))
                         (*c)->disconnected = true;
                 }
                 if (FD_ISSET((*c)->socket, &exceptfds)) {
