@@ -259,11 +259,9 @@ int receive_from_client(patch_client *client) {
         if (bytes == -1)
             perror("recv");
 
-        if (bytes <= 0) {
+        if (bytes <= 0)
             // Disconnect on error or if the client explicitly closed the connection.
-            client->disconnected = true;
             return (bytes == -1) ? -1 : 1;
-        }
         if (client->recv_size < 4)
             // Wait for the client to send us more data since we don't have a header yet.
             return 0;
@@ -287,10 +285,8 @@ int receive_from_client(patch_client *client) {
 
     if (bytes == -1)
         perror("recv");
-    if (bytes <= 0) {
-        client->disconnected = true;
+    if (bytes <= 0)
         return (bytes == -1) ? -1 : 1;
-    }
 
     if (client->recv_size < client->packet_sz)
         // Wait until we get the rest of the packet.
@@ -380,7 +376,6 @@ patch_client* accept_client(int sockfd) {
         }
     }
 
-
     /* Generate the encryption keys for the client and server.*/
     static std::mt19937 rand_gen(time(NULL));
     static std::uniform_int_distribution<uint32_t> dist(0, UINT32_MAX);
@@ -428,8 +423,7 @@ void handle_connections(int patchfd, int datafd) {
             if ((*c)->sending_files)
                 FD_SET((*c)->socket, &writefds);
 
-            if ((*c)->socket > fd_max)
-                fd_max = (*c)->socket;
+            fd_max = ((*c)->socket > fd_max) ? (*c)->socket : fd_max;
         }
 
         if ((select_result = select(fd_max + 1, &readfds, &writefds, &exceptfds, &timeout)) > 0) {
@@ -453,27 +447,22 @@ void handle_connections(int patchfd, int datafd) {
             
             // Iterate over the connected clients.
             for (c = connections.begin(), end = connections.end(); c != end; ++c) {
-#ifdef DEBUGGING
-                    printf("Checking client %s\n", (*c)->ip_addr_str);
-#endif
                 if (FD_ISSET((*c)->socket, &readfds)) {
-                    if (receive_from_client((*c)) == 1) {
-                    remove_client:
-                        destory_client(*c);
-                        connections.erase(c++);
-                        continue;
-                    }
+                    if (receive_from_client((*c)) == 1)
+                        (*c)->disconnected = true;
                 }
                 // Are we sending the client files?
-                if (FD_ISSET((*c)->socket, &writefds)) {
+                if (FD_ISSET((*c)->socket, &writefds) && !(*c)->disconnected) {
                     if (sending_client_file(*c) == -1)
-                        // I know, I shouldn't use a GOTO.
-                        goto remove_client;
+                        (*c)->disconnected = true;
                 }
                 if (FD_ISSET((*c)->socket, &exceptfds)) {
-#ifdef DEBUGGING
-                        printf("Exception on socket %d\n", (*c)->socket);
-#endif
+                    printf("Exception on socket %d\n", (*c)->socket);
+                    (*c)->disconnected = true;
+                }
+
+                // Disconnect the client if we've been waiting to close the connection.
+                if ((*c)->disconnected) {
                     destory_client(*c);
                     connections.erase(c++);
                 }
@@ -753,6 +742,7 @@ int main(int argc, const char * argv[]) {
     int data_sockfd = create_socket(server_config->data_port, &hints);
     printf("OK\n");
     
+    printf("\nListening for connections...\n\n");
     handle_connections(patch_sockfd, data_sockfd);
 
     return 0;
