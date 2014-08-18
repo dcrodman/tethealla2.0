@@ -8,7 +8,7 @@ extern "C" {
 #include "login.h"
 
 int send_bb_login_welcome(BANANA* client, uint8_t s_seed[48], uint8_t c_seed[48]) {
-    bb_login_welcome_pkt *pkt = (bb_login_welcome_pkt*) client->sndbuf;
+    bb_login_welcome_pkt *pkt = (bb_login_welcome_pkt*) client->sndbuf + client->send_size;
     memset(pkt, 0, BB_LOGIN_WELCOME_SZ);
 
     pkt->header.type = LE16(BB_LOGIN_WELCOME_TYPE);
@@ -17,13 +17,12 @@ int send_bb_login_welcome(BANANA* client, uint8_t s_seed[48], uint8_t c_seed[48]
     memcpy(pkt->server_vector, s_seed, 48);
     memcpy(pkt->client_vector, c_seed, 48);
 
-    client->snddata += BB_LOGIN_WELCOME_SZ;
+    client->send_size += BB_LOGIN_WELCOME_SZ;
     client->crypt_on = 1;
 
-    printf("BB Login Welcome\n");
+    printf("Sending BB Login Welcome\n");
     print_payload((unsigned char*)pkt, BB_LOGIN_WELCOME_SZ);
     printf("\n");
 
-    // TODO: Send the packet since we can't proceed without this.
     return 0;
 }
