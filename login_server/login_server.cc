@@ -4025,9 +4025,13 @@ BANANA* accept_client(int sockfd, server_type stype) {
         return NULL;
     }
 
-    BANANA* client = (BANANA*) malloc(sizeof(BANANA*));
+    BANANA* client = (BANANA*) malloc(sizeof(BANANA));
     client->plySockfd = clientfd;
     client->session = stype;
+    client->send_size = 0;
+
+    memset(client->recv_buffer, 0, TCP_BUFFER_SIZE);
+    memset(client->send_buffer, 0, TCP_BUFFER_SIZE);
 
     if (clientaddr.ss_family == AF_INET) {
         sockaddr_in* ip = ((sockaddr_in*)&clientaddr);
@@ -4047,6 +4051,8 @@ BANANA* accept_client(int sockfd, server_type stype) {
         inet_ntop(AF_INET6, &(ip->sin6_addr), client->ip_addr_str, INET6_ADDRSTRLEN);
     }
     */
+
+    // TODO: Initialize encryption vectors here.
 
     // Send them the welcome packet. If this fails for some reason then we
     // aren't able to proceed, so bail.
@@ -4075,20 +4081,35 @@ void handle_connections(int loginfd, int charfd, int shipfd) {
     timeval timeout = { .tv_sec = 10 };
 
     while (1) {
+
+        servertime = time(NULL);
+
         FD_ZERO(&readfds);
         FD_ZERO(&writefds);
         FD_ZERO(&exceptfds);
 
         // Add our clients to the apropriate fd sets.
         for (c = client_connections.begin(), c_end = client_connections.end(); c != c_end; ++c) {
+            // TODO: Figure out what this is for and add/remove it as apropriate.
+            /*
+             if (workConnect->lastTick != (unsigned) servertime)
+             {
+             if (workConnect->lastTick > (unsigned) servertime)
+             ch2 = 1;
+             else
+             ch2 = 1 + ((unsigned) servertime - workConnect->lastTick);
+             workConnect->lastTick = (unsigned) servertime;
+             workConnect->packetsSec /= ch2;
+             workConnect->toBytesSec /= ch2;
+             workConnect->fromBytesSec /= ch2;
+             }
+             */
+            
             FD_SET((*c)->plySockfd, &readfds);
             FD_SET((*c)->plySockfd, &exceptfds);
 
-            // TODO: add lastTick stuff
-
-            // TODO: adjust this for new handling in recieve_from_client
             // Only add the client to writefds if we have something to send.
-            if ((*c)->snddata - (*c)->sndwritten)
+            if ((*c)->send_size > 0)
                 FD_SET((*c)->plySockfd, &writefds);
 
             fd_max = max(fd_max, (*c)->plySockfd);
@@ -4109,6 +4130,12 @@ void handle_connections(int loginfd, int charfd, int shipfd) {
                 // TODO: Kill the ship
                 continue;
             }
+
+            // Limit time of authorization to 60 seconds...
+
+            if ((workShip->authed == 0) && ((unsigned) servertime - workShip->connected >= 60))
+                workShip->todc = 1;
+
 
             FD_SET((*s)->shipSockfd, &readfds);
             FD_SET((*s)->shipSockfd, &exceptfds);
@@ -4141,6 +4168,16 @@ void handle_connections(int loginfd, int charfd, int shipfd) {
 
             if (FD_ISSET(shipfd, &readfds)) {
                 // TODO: Create new ship connection and start encryption.
+                /*
+                 if ( ( workShip->shipSockfd = tcp_accept ( ship_sockfd, (struct sockaddr*) &listen_in, listen_length ) ) >= 0 ) {
+                     workShip->connection_index = ch;
+                     serverShipList[serverNumShips++] = ch;
+                     printf ("Accepted SHIP connection from %s:%u\n", inet_ntoa (listen_in.sin_addr), listen_in.sin_port );
+                     *(unsigned *) &workShip->listenedAddr[0] = *(unsigned*) &listen_in.sin_addr;
+                     workShip->connected = workShip->last_ping = (unsigned) servertime;
+                     ShipSend00 (workShip);
+                 }
+                 */
             }
 
             // Check our connected clients for activity.
@@ -4151,6 +4188,7 @@ void handle_connections(int loginfd, int charfd, int shipfd) {
 
                 if (FD_ISSET((*c)->plySockfd, &writefds)) {
                     // TODO: Send whatever data we have to the client.
+
                 }
 
                 if (FD_ISSET((*c)->plySockfd, &exceptfds)) {
@@ -4162,15 +4200,104 @@ void handle_connections(int loginfd, int charfd, int shipfd) {
             for (s = ship_connections.begin(), s_end = ship_connections.end(); s != s_end; ++c) {
                 if (FD_ISSET((*s)->shipSockfd, &readfds)) {
                     // TODO: Read data from the ship.
+
+                    /* Code from original
+                     if ( ( pkt_len = recv (workShip->shipSockfd, &tmprcv[0], PACKET_BUFFER_SIZE - 1, 0) ) <= 0 )
+                     {
+                         printf ("Lost connection with the %s ship...\n", workShip->name );
+                         initialize_ship (workShip);
+                     }
+                     else
+                     {
+                         // Work with it.
+                         for (pkt_c=0;pkt_c<pkt_len;pkt_c++)
+                         {
+                             workShip->rcvbuf[workShip->rcvread++] = tmprcv[pkt_c];
+
+                             if (workShip->rcvread == 4)
+                             {
+                                // Read out how much data we're expecting this packet.
+                                workShip->expect = *(unsigned*) &workShip->rcvbuf[0];
+
+                                if ( workShip->expect > TCP_BUFFER_SIZE )
+                                {
+                                    printf ("Lost connection with the %s ship...\n", workShip->name );
+                                    initialize_ship ( workShip ); // This shouldn't happen, lol.
+                                }
+                             }
+
+                             if ( ( workShip->rcvread == workShip->expect ) && ( workShip->expect != 0 ) )
+                             {
+                                decompressShipPacket ( workShip, &workShip->decryptbuf[0], &workShip->rcvbuf[0] );
+
+                                workShip->expect = *(unsigned *) &workShip->decryptbuf[0];
+
+                                if ( workShip->packetdata + workShip->expect < PACKET_BUFFER_SIZE )
+                                {
+                                    memcpy ( &workShip->packet[workShip->packetdata], &workShip->decryptbuf[0], workShip->expect );
+                                    workShip->packetdata += workShip->expect;
+                                }
+                                else
+                                {
+                                    initialize_ship ( workShip );
+                                    break;
+                                }
+                                workShip->rcvread = 0;
+                             }
+                         }
+                     }
+                     */
+
+                    /* TODO: Place in ship handler.
+                     if (workShip->packetdata) {
+                     ship_this_packet = *(unsigned *)&workShip->packet[workShip->packetread];
+                     memcpy (&workShip->decryptbuf[0], &workShip->packet[workShip->packetread], ship_this_packet);
+
+                     ShipProcessPacket (workShip);
+
+                     workShip->packetread += ship_this_packet;
+
+                     if (workShip->packetread == workShip->packetdata)
+                     workShip->packetread = workShip->packetdata = 0;
+                     }
+                     */
+
                 }
 
                 if (FD_ISSET((*s)->shipSockfd, &writefds)) {
                     // TODO: Send data to the ship.
+                    /*
+                     // Write shit.
+
+                     bytes_sent = send (workShip->shipSockfd, &workShip->sndbuf[workShip->sndwritten],
+                     workShip->snddata - workShip->sndwritten, 0);
+                     if (bytes_sent == -1)
+                     {
+                     printf ("Lost connection with the %s ship...\n", workShip->name );
+                     initialize_ship (workShip);
+                     }
+                     else
+                     workShip->sndwritten += bytes_sent;
+
+                     if (workShip->sndwritten == workShip->snddata)
+                     workShip->sndwritten = workShip->snddata = 0;
+                     */
                 }
 
                 if (FD_ISSET((*s)->shipSockfd, &exceptfds)) {
                     // TODO: Remove the ship
                 }
+
+                /*
+                 if (workShip->todc)
+                 {
+                 if ( workShip->snddata - workShip->sndwritten )
+                 send (workShip->shipSockfd, &workShip->sndbuf[workShip->sndwritten],
+                 workShip->snddata - workShip->sndwritten, 0);
+                 printf ("Terminated connection with ship...\n" );
+                 initialize_ship (workShip);
+                 }
+                 */
             }
 
         } else if (select_result == -1) {
@@ -4479,444 +4606,8 @@ int main( int argc, char * argv[] ) {
 
 	printf ("\nListening...\n");
 
-	for (;;)
-	{
-		int nfds = 0;
+    handle_connections(login_sockfd, character_sockfd, ship_sockfd);
 
-		/* Ping pong?! */
-
-		servertime = time(NULL);
-
-		FD_ZERO (&ReadFDs);
-		FD_ZERO (&WriteFDs);
-		FD_ZERO (&ExceptFDs);
-
-        // Iterate over all of oure connections (even those that aren't connected...)
-		for (ch=0;ch<serverNumConnections;ch++)
-		{
-            // Connection's spot on the list?
-			connectNum = serverConnectionList[ch];
-            // workConnect = the client we're currently working with (BANANA*)
-			workConnect = connections[connectNum];
-
-            // If we have an active connection (it's set to -1 otherwise)
-			if (workConnect->plySockfd >= 0)
-			{
-                // Do we have packet data? (Q: Where is this assigned?)
-				if (workConnect->packetdata)
-				{
-					this_packet = *(unsigned short*) &workConnect->packet[workConnect->packetread];
-					memcpy (&workConnect->decryptbuf[0], &workConnect->packet[workConnect->packetread], this_packet);
-
-                    // Transfer off to the handler for whichever the sever the client is connected.
-					switch (workConnect->session)
-					{
-					case LOGIN:
-						// Login server
-						LoginProcessPacket (workConnect);
-						break;
-					case CHARACTER:
-						// Character server
-						CharacterProcessPacket (workConnect);
-						break;
-					}
-					workConnect->packetread += this_packet;
-					if (workConnect->packetread == workConnect->packetdata)
-						workConnect->packetread = workConnect->packetdata = 0;
-				}
-                // Q: How does this work?
-				if (workConnect->lastTick != (unsigned) servertime)
-				{
-					if (workConnect->lastTick > (unsigned) servertime)
-						ch2 = 1;
-					else
-						ch2 = 1 + ((unsigned) servertime - workConnect->lastTick);
-                    workConnect->lastTick = (unsigned) servertime;
-                    workConnect->packetsSec /= ch2;
-                    workConnect->toBytesSec /= ch2;
-                    workConnect->fromBytesSec /= ch2;
-				}
-
-				/*
-					if (((unsigned) servertime - workConnect->connected >= 300) || 
-						(workConnect->connected > (unsigned) servertime))
-					{
-						Send1A ("You have been idle for too long.  Disconnecting...", workConnect);
-						workConnect->todc = 1;
-					}
-					*/
-
-                // Add client to read/except fds.
-				FD_SET (workConnect->plySockfd, &ReadFDs);
-				nfds = max (nfds, workConnect->plySockfd);
-				FD_SET (workConnect->plySockfd, &ExceptFDs);
-				nfds = max (nfds, workConnect->plySockfd);
-
-                // If we have data to send the client, add them to writefds.
-				if (workConnect->snddata - workConnect->sndwritten)
-				{
-					FD_SET (workConnect->plySockfd, &WriteFDs);
-					nfds = max (nfds, workConnect->plySockfd);
-				}
-			}
-		}
-
-        // Iterate over our connected ships.
-		for (ch=0;ch<serverNumShips;ch++)
-		{
-			shipNum = serverShipList[ch];
-			workShip = ships[shipNum];
-
-			if (workShip->shipSockfd >= 0) 
-			{
-				// Send a ping request to the ship when 30 seconds passes...
-				if (((unsigned) servertime - workShip->last_ping >= 30) && (workShip->sent_ping == 0))
-				{
-					workShip->sent_ping = 1;
-					ShipSend11 (workShip);
-				}
-
-				// If it's been over a minute since we've heard from a ship, terminate 
-				// the connection with it.
-
-				if ((unsigned) servertime - workShip->last_ping > 60)
-				{
-					printf ("%s ship ping timeout.\n", workShip->name );
-					initialize_ship (workShip);
-				}
-				else
-				{
-					if (workShip->packetdata)
-					{
-						ship_this_packet = *(unsigned *)&workShip->packet[workShip->packetread];
-						memcpy (&workShip->decryptbuf[0], &workShip->packet[workShip->packetread], ship_this_packet);
-
-						ShipProcessPacket (workShip);
-
-						workShip->packetread += ship_this_packet;
-
-						if (workShip->packetread == workShip->packetdata)
-							workShip->packetread = workShip->packetdata = 0;
-					}
-
-
-					/* Limit time of authorization to 60 seconds... */
-
-					if ((workShip->authed == 0) && ((unsigned) servertime - workShip->connected >= 60))
-						workShip->todc = 1;
-
-
-					FD_SET (workShip->shipSockfd, &ReadFDs);
-					nfds = max (nfds, workShip->shipSockfd);
-					if (workShip->snddata - workShip->sndwritten)
-					{
-						FD_SET (workShip->shipSockfd, &WriteFDs);
-						nfds = max (nfds, workShip->shipSockfd);
-					}
-				}
-			}
-		}
-
-        // Add our always-listening ports to listen for connections.
-		FD_SET (login_sockfd, &ReadFDs);
-		nfds = max (nfds, login_sockfd);
-		FD_SET (character_sockfd, &ReadFDs);
-		nfds = max (nfds, character_sockfd);
-		FD_SET (ship_sockfd, &ReadFDs);
-		nfds = max (nfds, ship_sockfd);
-
-		/* Check sockets for activity. */
-
-		if ( select ( nfds + 1, &ReadFDs, &WriteFDs, &ExceptFDs, &select_timeout ) > 0 ) 
-		{
-			if (FD_ISSET (login_sockfd, &ReadFDs))
-			{
-				// Someone's attempting to connect to the login server.
-				ch = free_connection();
-				if (ch != 0xFFFF)
-				{
-					listen_length = sizeof (listen_in);
-					workConnect = connections[ch];
-					if ( ( workConnect->plySockfd = tcp_accept (login_sockfd, (struct sockaddr*) &listen_in, listen_length ) ) >= 0 )
-					{
-						workConnect->connection_index = ch;
-						serverConnectionList[serverNumConnections++] = ch;
-						memcpy ( &workConnect->IP_Address[0], inet_ntoa (listen_in.sin_addr), 16 );
-						printf ("Accepted LOGIN connection from %s:%u\n", workConnect->IP_Address, listen_in.sin_port );
-						start_encryption (workConnect);
-						/* Doin' login process... */
-						//workConnect->login = 1;
-					}
-				}
-			}
-
-			if (FD_ISSET (character_sockfd, &ReadFDs))
-			{
-				// Someone's attempting to connect to the character server.
-				ch = free_connection();
-				if (ch != 0xFFFF)
-				{
-					listen_length = sizeof (listen_in);
-					workConnect = connections[ch];
-					if ( ( workConnect->plySockfd = tcp_accept ( character_sockfd, (struct sockaddr*) &listen_in, listen_length ) ) >= 0 )
-					{
-						workConnect->connection_index = ch;
-						serverConnectionList[serverNumConnections++] = ch;
-						memcpy ( &workConnect->IP_Address[0], inet_ntoa (listen_in.sin_addr), 16 );
-						printf ("Accepted CHARACTER connection from %s:%u\n", inet_ntoa (listen_in.sin_addr), listen_in.sin_port );
-						start_encryption (workConnect);
-						/* Doin' character process... */
-						//workConnect->login = 2;
-					}
-				}
-			}
-
-			if (FD_ISSET (ship_sockfd, &ReadFDs))
-			{
-				// A ship is attempting to connect to the ship transfer port.
-				ch = free_shipconnection();
-				if (ch != 0xFFFF)
-				{
-					listen_length = sizeof (listen_in);
-					workShip = ships[ch];
-					if ( ( workShip->shipSockfd = tcp_accept ( ship_sockfd, (struct sockaddr*) &listen_in, listen_length ) ) >= 0 )
-					{
-						workShip->connection_index = ch;
-						serverShipList[serverNumShips++] = ch;
-						printf ("Accepted SHIP connection from %s:%u\n", inet_ntoa (listen_in.sin_addr), listen_in.sin_port );
-						*(unsigned *) &workShip->listenedAddr[0] = *(unsigned*) &listen_in.sin_addr;
-						workShip->connected = workShip->last_ping = (unsigned) servertime;
-						ShipSend00 (workShip);
-					}
-				}
-			}
-
-			// Process client connections
-
-			for (ch=0;ch<serverNumConnections;ch++)
-			{
-				connectNum = serverConnectionList[ch];
-				workConnect = connections[connectNum];
-
-				if (workConnect->plySockfd >= 0)
-				{
-					if (FD_ISSET(workConnect->plySockfd, &ReadFDs))
-					{
-						if ( ( pkt_len = recv (workConnect->plySockfd, &tmprcv[0], TCP_BUFFER_SIZE - 1, 0) ) <= 0 )
-                        {
-							printf ("Could not read data from client...\n");
-							initialize_connection (workConnect);
-						}
-						else
-						{
-                            // Increment our bytes per second by however much we just got.
-							workConnect->fromBytesSec += (unsigned) pkt_len;
-
-							// Work with it.
-							for (pkt_c=0;pkt_c<pkt_len;pkt_c++)
-							{
-                                // Copy each byte from tmprcv into our recv buffer.
-								workConnect->rcvbuf[workConnect->rcvread++] = tmprcv[pkt_c];
-
-								if (workConnect->rcvread == 8)
-								{
-									/* Decrypt the packet header after receiving 8 bytes. */
-
-									//cipher_ptr = &workConnect->client_cipher;
-
-                                    decryptcopy ( workConnect->peekbuf, workConnect->rcvbuf, 8 );
-
-									/* Make sure we're expecting a multiple of 8 bytes. */
-
-									workConnect->expect = *(unsigned short*) &workConnect->peekbuf[0];
-
-									if ( workConnect->expect % 8 )
-										workConnect->expect += ( 8 - ( workConnect->expect % 8 ) );
-
-									if ( workConnect->expect > TCP_BUFFER_SIZE )
-									{
-										initialize_connection ( workConnect );
-										break;
-									}
-								}
-
-                                // Have we read the rest of the packet?
-								if ( ( workConnect->rcvread == workConnect->expect ) && ( workConnect->expect != 0 ) )
-								{
-                                    // Q: Why?
-									if ( workConnect->packetdata + workConnect->expect > TCP_BUFFER_SIZE )
-									{
-										initialize_connection ( workConnect );
-										break;
-									}
-									else
-									{
-										/* Decrypt the rest of the data if needed. */
-
-										//cipher_ptr = &workConnect->client_cipher;
-										*(long long*) &workConnect->packet[workConnect->packetdata] = *(long long*) &workConnect->peekbuf[0];
-
-										if ( workConnect->rcvread > 8 )
-											decryptcopy ( &workConnect->packet[workConnect->packetdata + 8], &workConnect->rcvbuf[8], workConnect->expect - 8 );
-
-                                        // Assign packetdata so that the loop above will pass it off to the correct handler.
-										this_packet = *(unsigned short*) &workConnect->peekbuf[0];
-										workConnect->packetdata += this_packet;
-
-                                        // Keeping track of how many packets we're getting per second
-										workConnect->packetsSec ++;
-
-										if ((workConnect->packetsSec   > 40)    ||
-											(workConnect->fromBytesSec > 15000) ||
-											(workConnect->toBytesSec   > 500000))
-										{
-											printf ("%u disconnected for possible DDOS. (p/s: %u, tb/s: %u, fb/s: %u)\n", workConnect->guildcard, workConnect->packetsSec, workConnect->toBytesSec, workConnect->fromBytesSec);
-											initialize_connection(workConnect);
-											break;
-										}
-
-										workConnect->rcvread = 0;
-									}
-								}
-							}
-						}
-					}
-
-					if (FD_ISSET(workConnect->plySockfd, &WriteFDs))
-					{
-						// We should only get here if we know that we have data to send.
-
-						//bytes_sent = send (workConnect->plySockfd, &workConnect->sndbuf[workConnect->sndwritten],
-						//	workConnect->snddata - workConnect->sndwritten, 0);
-                        bytes_sent = send_to_client(workConnect, workConnect->snddata);
-						if (bytes_sent == -1) {
-							printf ("Could not send data to client...\n");
-							initialize_connection (workConnect);							
-						}
-						else {
-                            // Move up our sndwritten
-							workConnect->sndwritten += bytes_sent;
-							workConnect->toBytesSec += (unsigned) bytes_sent;
-						}
-
-						if (workConnect->sndwritten == workConnect->snddata)
-							workConnect->sndwritten = workConnect->snddata = 0;
-					}
-
-                    // Send out whatever remaining data we had to the client and then d/c them.
-					if (workConnect->todc)
-					{
-						if ( workConnect->snddata - workConnect->sndwritten )
-							send (workConnect->plySockfd, &workConnect->sndbuf[workConnect->sndwritten],
-								workConnect->snddata - workConnect->sndwritten, 0);
-						initialize_connection (workConnect);
-					}
-
-					if (FD_ISSET(workConnect->plySockfd, &ExceptFDs)) // Exception?
-						initialize_connection (workConnect);
-				}
-			}
-
-			// Process ship connections
-
-			for (ch=0;ch<serverNumShips;ch++)
-			{
-				shipNum = serverShipList[ch];
-				workShip = ships[shipNum];
-
-				if (workShip->shipSockfd >= 0)
-				{
-					if (FD_ISSET(workShip->shipSockfd, &ReadFDs))
-					{
-						// Read shit.
-						if ( ( pkt_len = recv (workShip->shipSockfd, &tmprcv[0], PACKET_BUFFER_SIZE - 1, 0) ) <= 0 )
-						{
-							/*
-							wserror = WSAGetLastError();
-							printf ("Could not read data from client...\n");
-							printf ("Socket Error %u.\n", wserror );
-							*/
-							printf ("Lost connection with the %s ship...\n", workShip->name );
-							initialize_ship (workShip);
-						}
-						else
-						{
-							// Work with it.
-							for (pkt_c=0;pkt_c<pkt_len;pkt_c++)
-							{
-								workShip->rcvbuf[workShip->rcvread++] = tmprcv[pkt_c];
-
-								if (workShip->rcvread == 4)
-								{
-									/* Read out how much data we're expecting this packet. */
-									workShip->expect = *(unsigned*) &workShip->rcvbuf[0];
-
-									if ( workShip->expect > TCP_BUFFER_SIZE )
-									{
-										printf ("Lost connection with the %s ship...\n", workShip->name );
-										initialize_ship ( workShip ); /* This shouldn't happen, lol. */
-									}
-								}
-
-								if ( ( workShip->rcvread == workShip->expect ) && ( workShip->expect != 0 ) )
-								{
-									decompressShipPacket ( workShip, &workShip->decryptbuf[0], &workShip->rcvbuf[0] );
-
-									workShip->expect = *(unsigned *) &workShip->decryptbuf[0];
-
-									if ( workShip->packetdata + workShip->expect < PACKET_BUFFER_SIZE )
-									{
-										memcpy ( &workShip->packet[workShip->packetdata], &workShip->decryptbuf[0], workShip->expect );
-										workShip->packetdata += workShip->expect;
-									}
-									else
-									{
-										initialize_ship ( workShip );
-										break;
-									}
-									workShip->rcvread = 0;
-								}
-							}
-						}
-					}
-
-					if (FD_ISSET(workShip->shipSockfd, &WriteFDs))
-					{
-						// Write shit.
-
-						bytes_sent = send (workShip->shipSockfd, &workShip->sndbuf[workShip->sndwritten],
-							workShip->snddata - workShip->sndwritten, 0);
-						if (bytes_sent == -1)
-						{
-							/*
-							wserror = WSAGetLastError();
-							printf ("Could not send data to client...\n");
-							printf ("Socket Error %u.\n", wserror );
-							*/
-							printf ("Lost connection with the %s ship...\n", workShip->name );
-							initialize_ship (workShip);							
-						}
-						else
-							workShip->sndwritten += bytes_sent;
-
-						if (workShip->sndwritten == workShip->snddata)
-							workShip->sndwritten = workShip->snddata = 0;
-
-					}
-
-					if (workShip->todc)
-						{
-							if ( workShip->snddata - workShip->sndwritten )
-								send (workShip->shipSockfd, &workShip->sndbuf[workShip->sndwritten],
-									workShip->snddata - workShip->sndwritten, 0);
-							printf ("Terminated connection with ship...\n" );
-							initialize_ship (workShip);
-						}
-
-				}
-			}
-		}
-	}
 	mysql_close( myData ) ;
 	return 0;
 }
