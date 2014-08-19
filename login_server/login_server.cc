@@ -3921,8 +3921,20 @@ void LoadDropData()
 	}
 }
 
+/* Process a client packet sent to the LOGIN server. Returns 0 on success, 1
+ on error and -1 if the handler received an unrecognized packet type. */
 int login_process_packet(BANANA* client) {
-    return 0;
+    bb_packet_header* header = (bb_packet_header*) client->recv_buffer;
+    header->type = LE16(header->type);
+    header->lenth = LE16(header->lenth);
+
+    bool result;
+    switch (header->type) {
+        default:
+            result = -1;
+            break;
+    }
+    return result;
 }
 
 int character_process_packet(BANANA* client) {
@@ -3973,7 +3985,6 @@ int receive_from_client(BANANA *client) {
     if (bytes <= 0)
         return (bytes == -1) ? -1 : 1;
 
-
     if (client->recv_size < client->packet_sz)
         // Wait until we get the rest of the packet.
         return 0;
@@ -3990,10 +4001,11 @@ handle:
 #endif
 
     // TODO: Temporarily use existing login handlers.
+    int result = 0;
     if (client->session == LOGIN)
-        login_process_packet(client);
+        result = login_process_packet(client);
     else
-        character_process_packet(client);
+        result = character_process_packet(client);
 
     // Move the packet out of the recv buffer and reduce the currently received size.
 
@@ -4001,9 +4013,21 @@ handle:
     memmove(client->recv_buffer, client->recv_buffer + client->packet_sz, client->packet_sz);
     client->packet_sz = 0;
 
-    return 0;
+    if (result)
+        return -1;
+    else
+        return 0;
 }
 
+void destroy_client(BANANA* client) {
+
+}
+
+/* Allocates and initializes a new client structure for a connection. Also
+ responsible for sending the initial welcome packet with the encryption information.
+ Returns a pointer to the new client struct if successful, otherwise returns NULL
+ if any errors were encountered (including failing to send the welcome packet).
+ */
 BANANA* accept_client(int sockfd, server_type stype) {
     sockaddr_storage clientaddr;
     socklen_t addrsize = sizeof clientaddr;
