@@ -4015,6 +4015,12 @@ BANANA* accept_client(int sockfd, server_type stype) {
     }
 
     BANANA* client = (BANANA*) malloc(sizeof(BANANA));
+    if (!client) {
+        perror("malloc");
+        return NULL;
+    }
+    memset(client, 0, sizeof(BANANA));
+
     client->plySockfd = clientfd;
     client->session = stype;
     client->send_size = 0;
@@ -4178,6 +4184,8 @@ void handle_connections(int loginfd, int charfd, int shipfd) {
             for (c = client_connections.begin(), c_end = client_connections.end(); c != c_end; ++c) {
                 if (FD_ISSET((*c)->plySockfd, &readfds)) {
                     // TODO: Read data from the client
+                    if (receive_from_client((*c)))
+                        (*c)->todc = true;
                 }
 
                 if (FD_ISSET((*c)->plySockfd, &writefds)) {
@@ -4187,6 +4195,11 @@ void handle_connections(int loginfd, int charfd, int shipfd) {
 
                 if (FD_ISSET((*c)->plySockfd, &exceptfds)) {
                     // TODO: Remove the client.
+                }
+
+                if ((*c)->todc) {
+                    destroy_client(*c);
+                    client_connections.erase(c++);
                 }
             }
 
