@@ -31,10 +31,6 @@ typedef struct st_banana {
     unsigned int recv_size;
     unsigned int packet_sz;
 
-	unsigned char peekbuf[8];   // decrypted header
-	unsigned char rcvbuf [TCP_BUFFER_SIZE]; // intermediate rcv buffer?
-	unsigned short rcvread; // how much data is in rcvbuf
-	unsigned short expect; // how much data we're expecting
 	unsigned char decryptbuf [TCP_BUFFER_SIZE];
 	unsigned char sndbuf [TCP_BUFFER_SIZE]; // our buffer of data to send (used directly)
 	unsigned char encryptbuf [TCP_BUFFER_SIZE]; // where send data is dumped before encryption
