@@ -72,7 +72,7 @@ patch_config *server_config;
 
 void destory_client(patch_client* client);
 
-int handle_file_check(patch_client *client) {
+bool handle_file_check(patch_client *client) {
     file_status_packet *pkt = (file_status_packet*) client->recv_buffer;
     patch_file *patch = patches.at(pkt->patchID);
 
@@ -91,11 +91,11 @@ int handle_file_check(patch_client *client) {
     if (missing || update)
         client->patch_list->push_back(patch);
 
-    return 0;
+    return true;
 }
 
 /* Handle sending the entire file list to the client. */
-int send_file_list(patch_client* client) {
+bool send_file_list(patch_client* client) {
     //Iterate over the connected clients.
     std::vector<patch_file*>::const_iterator patch, end;
     send_change_directory(client, ".");
@@ -121,7 +121,7 @@ int send_file_list(patch_client* client) {
 
     send_dir_above(client);
     send_list_done(client);
-    return 0;
+    return true;
 }
 
 /* Check to see if we have any files to send the client and, if so, send the
@@ -173,7 +173,7 @@ int sending_client_file(patch_client *client) {
 
 /* Figure out whether we need to send any files to the client. If so, build up the
 file info packet, send it out, and start the process of sending files. */
-int handle_client_list_done(patch_client *client) {
+bool handle_client_list_done(patch_client *client) {
     uint32_t num_files = 0, size = 0;
     std::list<patch_file*>::const_iterator patch, end;
     for (patch = client->patch_list->begin(), end = client->patch_list->end(); patch != end; ++patch) {
@@ -189,7 +189,7 @@ int handle_client_list_done(patch_client *client) {
     } else
         // We don't have anything to send the client.
         send_files_done(client);
-    return 0;
+    return true;
 }
 
 /* Process a client packet sent to the PATCH server. Returns 0 on success,
@@ -556,7 +556,7 @@ int load_patches(const char* dirname) {
                 patch_entry->file_size = ftell(fd);
                 fseek(fd, 0, SEEK_SET);
 
-                char *filebuf = (char*) malloc(patch_entry->file_size + 1);
+                char *filebuf = (char*) malloc(sizeof(char) * patch_entry->file_size + 1);
                 fread(filebuf, 1, patch_entry->file_size, fd);
                 patch_entry->checksum = calculate_checksum(filebuf, patch_entry->file_size);
                 patch_entry->index = patch_index++;
