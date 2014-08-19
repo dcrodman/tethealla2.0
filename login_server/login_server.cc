@@ -891,17 +891,6 @@ void start_encryption(BANANA* connect)
 			initialize_connection (workConnect);
 		}
 	}
-
-    /* Initialize our encryption keys. */
-    uint8_t server_seed[48], client_seed[48];
-    for (int i = 0; i < 48; i++) {
-        server_seed[i] = dist(rand_gen);
-        client_seed[i] = dist(rand_gen);
-    }
-    CRYPT_CreateKeys(&connect->server_cipher, server_seed, CRYPT_BLUEBURST);
-    CRYPT_CreateKeys(&connect->client_cipher, client_seed, CRYPT_BLUEBURST);
-
-    send_bb_login_welcome(connect, server_seed, client_seed);
 }
 
 void SendB1 (BANANA* client) {
@@ -4052,12 +4041,17 @@ BANANA* accept_client(int sockfd, server_type stype) {
     }
     */
 
-    // TODO: Initialize encryption vectors here.
+    // Initialize our encryption keys.
+    uint8_t server_seed[48], client_seed[48];
+    for (int i = 0; i < 48; i++) {
+        server_seed[i] = dist(rand_gen);
+        client_seed[i] = dist(rand_gen);
+    }
+    CRYPT_CreateKeys(client->server_cipher, server_seed, CRYPT_BLUEBURST);
+    CRYPT_CreateKeys(client->client_cipher, client_seed, CRYPT_BLUEBURST);
 
-    // Send them the welcome packet. If this fails for some reason then we
-    // aren't able to proceed, so bail.
-    // TODO: Return NULL if this fails.
-    start_encryption(client);
+    if (send_bb_login_welcome(connect, server_seed, client_seed))
+        return NULL;
 
     client->connected = (unsigned) servertime;
     // TODO: Can these be ditched?
@@ -4132,13 +4126,13 @@ void handle_connections(int loginfd, int charfd, int shipfd) {
             }
 
             // Limit time of authorization to 60 seconds...
-
             if ((workShip->authed == 0) && ((unsigned) servertime - workShip->connected >= 60))
                 workShip->todc = 1;
 
 
             FD_SET((*s)->shipSockfd, &readfds);
             FD_SET((*s)->shipSockfd, &exceptfds);
+            // TODO: Rewrite once packing sending functions are implemented.
             if ((*s)->snddata - (*s)->sndwritten)
                 FD_SET((*s)->shipSockfd, &writefds);
 
