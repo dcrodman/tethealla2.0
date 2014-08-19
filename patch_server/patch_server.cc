@@ -346,6 +346,12 @@ patch_client* accept_client(int sockfd) {
     }
 
     patch_client* client = (patch_client*) malloc(sizeof(patch_client));
+    if (!client) {
+        perror("malloc");
+        return NULL;
+    }
+    memset(client, 0, sizeof(patch_client));
+
     client->socket = clientfd;
     client->disconnected = false;
     client->patch_list = new std::list<patch_file*>;
