@@ -4198,7 +4198,6 @@ void handle_connections(int loginfd, int charfd, int shipfd) {
             // Check our connected clients for activity.
             for (c = client_connections.begin(), c_end = client_connections.end(); c != c_end; ++c) {
                 if (FD_ISSET((*c)->plySockfd, &readfds)) {
-                    // TODO: Read data from the client
                     if (receive_from_client((*c)))
                         (*c)->todc = true;
                 }
@@ -4208,11 +4207,11 @@ void handle_connections(int loginfd, int charfd, int shipfd) {
 
                 }
 
-                if (FD_ISSET((*c)->plySockfd, &exceptfds)) {
-                    // TODO: Remove the client.
-                }
+                if (FD_ISSET((*c)->plySockfd, &exceptfds))
+                    (*c)->todc = true;
 
                 if ((*c)->todc) {
+                    // TODO: Send whatever remaining data we have to the client.
                     destroy_client(*c);
                     client_connections.erase(c++);
                 }
