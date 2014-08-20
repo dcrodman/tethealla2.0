@@ -43,7 +43,6 @@ int send_bb_login_welcome(BANANA* client, uint8_t s_seed[48], uint8_t c_seed[48]
     memcpy(pkt->client_vector, c_seed, 48);
 
     client->send_size += BB_LOGIN_WELCOME_SZ;
-    client->crypt_on = 1;
 
     printf("Sending BB Login Welcome\n");
     print_payload((unsigned char*)pkt, BB_LOGIN_WELCOME_SZ);

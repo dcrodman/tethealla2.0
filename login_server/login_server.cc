@@ -4077,8 +4077,6 @@ BANANA* accept_client(int sockfd, server_type stype) {
         return NULL;
 
     client->connected = (unsigned) servertime;
-    // TODO: Can these be ditched?
-	client->crypt_on = 1;
 	client->sendCheck[SEND_PACKET_03] = 1;
 
     client_connections.push_back(client);

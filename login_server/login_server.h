@@ -38,7 +38,7 @@ typedef struct st_banana {
 	unsigned char packet [TCP_BUFFER_SIZE]; // our current working packet
 	unsigned short packetdata; // size of our current working packet?
 	unsigned short packetread;
-	int crypt_on;
+
 	CRYPT_SETUP server_cipher, client_cipher; // client/server keys
 	unsigned guildcard;
 	char guildcard_string[12];
