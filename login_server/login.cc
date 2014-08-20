@@ -50,3 +50,30 @@ int send_bb_login_welcome(BANANA* client, uint8_t s_seed[48], uint8_t c_seed[48]
 
     return send_packet(client, BB_LOGIN_WELCOME_SZ);
 }
+
+int handle_login(BANANA* client) {
+
+}
+
+/* Process a client packet sent to the LOGIN server. Returns 0 on success, 1
+ - on error and -1 if the handler received an unrecognized packet type. */
+int login_process_packet(BANANA* client) {
+    bb_packet_header* header = (bb_packet_header*) client->recv_buffer;
+    header->type = LE16(header->type);
+    header->length = LE16(header->length);
+
+    bool result;
+    switch (header->type) {
+        case BB_LOGIN_DISCONNECT:
+            client->todc = true;
+            result = 0;
+            break;
+        case BB_LOGIN_LOGIN:
+            result = handle_login(client);
+            break;
+        default:
+            result = -1;
+            break;
+        }
+    return result;
+}

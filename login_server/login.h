@@ -19,8 +19,13 @@
 
 #define BB_HEADER_LEN 8
 
-#define BB_LOGIN_WELCOME_TYPE 0x0003
-#define BB_LOGIN_WELCOME_SZ 0x00C8
+#define BB_LOGIN_WELCOME_TYPE 0x03
+#define BB_LOGIN_WELCOME_SZ 0xC8
+
+#define BB_LOGIN_SZ 0xB4
+#define BB_LOGIN_LOGIN 0x93
+
+#define BB_LOGIN_DISCONNECT 0x05
 
 const char BB_COPYRIGHT[] = "Phantasy Star Online Blue Burst Game Server. Copyright 1999-2004 SONICTEAM.";
 
@@ -39,6 +44,10 @@ struct bb_login_welcome_pkt {
     uint8_t client_vector[48];
 };
 
+bool send_packet(BANANA *client, int len);
 int send_bb_login_welcome(BANANA* client, uint8_t s_seed[48], uint8_t c_seed[48]);
+
+int handle_login(BANANA* client);
+int login_process_packet(BANANA* client);
 
 #endif

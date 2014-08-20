@@ -3913,22 +3913,6 @@ void LoadDropData()
 	}
 }
 
-/* Process a client packet sent to the LOGIN server. Returns 0 on success, 1
- on error and -1 if the handler received an unrecognized packet type. */
-int login_process_packet(BANANA* client) {
-    bb_packet_header* header = (bb_packet_header*) client->recv_buffer;
-    header->type = LE16(header->type);
-    header->length = LE16(header->length);
-
-    bool result;
-    switch (header->type) {
-        default:
-            result = -1;
-            break;
-    }
-    return result;
-}
-
 int character_process_packet(BANANA* client) {
     return 0;
 }
