@@ -1,5 +1,6 @@
 #include <cstring>
 #include <cstdio>
+#include <sys/socket.h>
 
 extern "C" {
     #include "sniffex.h"
@@ -48,5 +49,5 @@ int send_bb_login_welcome(BANANA* client, uint8_t s_seed[48], uint8_t c_seed[48]
     print_payload((unsigned char*)pkt, BB_LOGIN_WELCOME_SZ);
     printf("\n");
 
-    return 0;
+    return send_packet(client, BB_LOGIN_WELCOME_SZ);
 }

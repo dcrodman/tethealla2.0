@@ -3918,7 +3918,7 @@ void LoadDropData()
 int login_process_packet(BANANA* client) {
     bb_packet_header* header = (bb_packet_header*) client->recv_buffer;
     header->type = LE16(header->type);
-    header->lenth = LE16(header->lenth);
+    header->length = LE16(header->length);
 
     bool result;
     switch (header->type) {
@@ -4069,10 +4069,10 @@ BANANA* accept_client(int sockfd, server_type stype) {
         server_seed[i] = dist(rand_gen);
         client_seed[i] = dist(rand_gen);
     }
-    CRYPT_CreateKeys(client->server_cipher, server_seed, CRYPT_BLUEBURST);
-    CRYPT_CreateKeys(client->client_cipher, client_seed, CRYPT_BLUEBURST);
+    CRYPT_CreateKeys(&client->server_cipher, server_seed, CRYPT_BLUEBURST);
+    CRYPT_CreateKeys(&client->client_cipher, client_seed, CRYPT_BLUEBURST);
 
-    if (send_bb_login_welcome(connect, server_seed, client_seed))
+    if (!send_bb_login_welcome(client, server_seed, client_seed))
         return NULL;
 
     client->connected = (unsigned) servertime;
@@ -4173,13 +4173,13 @@ void handle_connections(int loginfd, int charfd, int shipfd) {
             if (FD_ISSET(loginfd, &readfds)) {
                 BANANA* client = accept_client(loginfd, LOGIN);
                 if (client)
-                    printf("Accepted LOGIN connection from %s:%d", client->IP_Address, client->port);
+                    printf("Accepted LOGIN connection from %s:%d\n", client->IP_Address, client->port);
             }
 
             if (FD_ISSET(charfd, &readfds)) {
                 BANANA* client = accept_client(charfd, CHARACTER);
                 if (client)
-                    printf("Accepted CHARACTER connection from %s:%d", client->IP_Address, client->port);
+                    printf("Accepted CHARACTER connection from %s:%d\n", client->IP_Address, client->port);
             }
 
             if (FD_ISSET(shipfd, &readfds)) {
@@ -4599,7 +4599,7 @@ int main( int argc, char * argv[] ) {
 	mysql_real_escape_string (myData, (char*)&DefaultTeamFlagSlashes[0], (const char*)&DefaultTeamFlag[0], 2048);
 	printf (" OK!\n");
 
-	/* Open the PSO BB Login Server Port... */
+    /* Open our login, character, and ship transfer server ports. */
     char port[5];
     addrinfo hints;
     hints.ai_flags = AI_NUMERICHOST;
