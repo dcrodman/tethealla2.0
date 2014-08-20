@@ -109,16 +109,8 @@ static std::uniform_int_distribution<uint8_t> dist(0, 255);
 std::list<BANANA*> client_connections;
 std::list<ORANGE*> ship_connections;
 
-/* functions */
-
-void send_to_server(int sock, char* packet);
-int receive_from_server(int sock, char* packet);
 void debug(const char *fmt, ...);
 void debug_perror(const char * msg);
-void tcp_listen (int sockfd);
-int tcp_accept (int sockfd, struct sockaddr *client_addr, int addr_len);
-int tcp_sock_connect(char* dest_addr, int port);
-int tcp_sock_open(struct in_addr ip, int port);
 
 /* Ship Packets */
 
@@ -4635,134 +4627,12 @@ int main( int argc, char * argv[] ) {
 		exit (1);
 	}
 
-	printf ("\nListening...\n");
 
+	printf ("\nListening...\n");
     handle_connections(login_sockfd, character_sockfd, ship_sockfd);
 
 	mysql_close( myData ) ;
 	return 0;
-}
-
-
-void send_to_server(int sock, char* packet)
-{
- int pktlen;
-
- pktlen = strlen (packet);
-
-	if (send(sock, packet, pktlen, 0) != pktlen)
-	{
-	  printf ("send_to_server(): failure");
-	  printf ("Hit [ENTER]");
-	  gets (&dp[0]);
-	  exit(1);
-	}
-
-}
-
-int receive_from_server(int sock, char* packet)
-{
- int pktlen;
-
-  if ((pktlen = recv(sock, packet, TCP_BUFFER_SIZE - 1, 0)) <= 0)
-	{
-	  printf ("receive_from_server(): failure");
-	  printf ("Hit [ENTER]");
-	  gets (&dp[0]);
-	  exit(1);
-	}
-  packet[pktlen] = 0;
-  return pktlen;
-}
-
-void tcp_listen (int sockfd)
-{
-	if (listen(sockfd, 10) < 0)
-	{
-		debug_perror ("Could not listen for connection");
-		printf ("Hit [ENTER]");
-		gets (&dp[0]);
-		exit(1);
-	}
-}
-
-int tcp_accept (int sockfd, struct sockaddr *client_addr, int addr_len)
-{
-	int fd;
-
-	if ((fd = accept (sockfd, client_addr, (socklen_t*)&addr_len)) < 0)
-		debug_perror ("Could not accept connection");
-
-	return (fd);
-}
-
-/* Dead code. */
-int tcp_sock_connect(char* dest_addr, int port)
-{
-	int fd;
-	struct sockaddr_in sa;
-
-	/* Clear it out */
-	memset((void *)&sa, 0, sizeof(sa));
-
-	fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-
-	/* Error */
-	if( fd < 0 )
-		debug_perror("Could not create socket");
-	else
-	{
-
-		memset (&sa, 0, sizeof(sa));
-		sa.sin_family = AF_INET;
-		sa.sin_addr.s_addr = inet_addr (dest_addr);
-		sa.sin_port = htons((unsigned short) port);
-
-		if (connect(fd, (struct sockaddr*) &sa, sizeof(sa)) < 0)
-			debug_perror("Could not make TCP connection");
-		else
-			debug ("tcp_sock_connect %s:%u", inet_ntoa (sa.sin_addr), sa.sin_port );
-	}
-	return(fd);
-}
-
-/*****************************************************************************/
-int tcp_sock_open(struct in_addr ip, int port)
-{
-	int fd, turn_on_option_flag = 1, rcSockopt;
-
-	struct sockaddr_in sa;
-
-	/* Clear it out */
-	memset((void *)&sa, 0, sizeof(sa));
-
-	fd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
-
-	/* Error */
-	if( fd < 0 ){
-		debug_perror("Could not create socket");
-		printf ("Hit [ENTER]");
-		gets (&dp[0]);
-		exit(1);
-	} 
-
-	sa.sin_family = AF_INET;
-	memcpy((void *)&sa.sin_addr, (void *)&ip, sizeof(struct in_addr));
-	sa.sin_port = htons((unsigned short) port);
-
-	/* Reuse port */
-
-	rcSockopt = setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (char *) &turn_on_option_flag, sizeof(turn_on_option_flag));
-
-	/* bind() the socket to the interface */
-	if (bind(fd, (struct sockaddr *)&sa, sizeof(struct sockaddr)) < 0){
-		debug_perror("Could not bind to port");
-		printf ("Hit [ENTER]");
-		gets (&dp[0]);
-		exit(1);
-	}
-
-	return(fd);
 }
 
 /*****************************************************************************
