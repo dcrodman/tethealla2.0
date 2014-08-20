@@ -17,6 +17,8 @@
 #define LE32(x) x
 #endif
 
+#define BB_HEADER_LEN 8
+
 #define BB_LOGIN_WELCOME_TYPE 0x0003
 #define BB_LOGIN_WELCOME_SZ 0x00C8
 

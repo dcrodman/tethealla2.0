@@ -3941,9 +3941,10 @@ int receive_from_client(BANANA *client) {
     bb_packet_header *header;
     ssize_t bytes = 0;
 
-    if (client->recv_size < 8) {
+    if (client->recv_size < BB_HEADER_LEN) {
         // Start by reading in the packet's header.
-        bytes = recv(client->plySockfd, client->recv_buffer, 8 - client->recv_size, 0);
+        bytes = recv(client->plySockfd, client->recv_buffer,
+                BB_HEADER_LEN - client->recv_size, 0);
         client->recv_size += (int) bytes;
         if (bytes == -1)
             perror("recv");
@@ -3951,19 +3952,19 @@ int receive_from_client(BANANA *client) {
         if (bytes <= 0)
             // Disconnect on error or if the client explicitly closed the connection.
             return (bytes == -1) ? -1 : 1;
-        if (client->recv_size < 8)
+        if (client->recv_size < BB_HEADER_LEN)
             // Wait for the client to send us more data since we don't have a header yet.
             return 0;
     }
 
     if (!client->packet_sz) {
         // Decrypt our header since we have all of it by now.
-        CRYPT_CryptData(&client->client_cipher, client->recv_buffer, 8, 0);
+        CRYPT_CryptData(&client->client_cipher, client->recv_buffer, BB_HEADER_LEN, 0);
         header = (bb_packet_header*) client->recv_buffer;
         client->packet_sz = header->length;
 
         // Skip ahead if all we got is an 8 byte header.
-        if (client->packet_sz == 8)
+        if (client->packet_sz == BB_HEADER_LEN)
             goto handle;
     }
 
@@ -3982,17 +3983,17 @@ int receive_from_client(BANANA *client) {
         return 0;
 
     // By now we've received the whole packet.
-    CRYPT_CryptData(&client->client_cipher, client->recv_buffer + 8, client->packet_sz - 8, 0);
+    CRYPT_CryptData(&client->client_cipher, client->recv_buffer + BB_HEADER_LEN,
+            client->packet_sz - BB_HEADER_LEN, 0);
 
 handle:
 
 #ifdef DEBUGGING
-    printf("Received %lu bytes from %s\n", bytes + 8, client->IP_Address);
+    printf("Received %lu bytes from %s\n", bytes + BB_HEADER_LEN, client->IP_Address);
     print_payload(client->recv_buffer, int(bytes));
     printf("\n");
 #endif
 
-    // TODO: Temporarily use existing login handlers.
     int result = 0;
     if (client->session == LOGIN)
         result = login_process_packet(client);
