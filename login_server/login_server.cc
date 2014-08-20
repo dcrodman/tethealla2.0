@@ -4090,6 +4090,7 @@ inline int max(int a, int b) {
 
 void handle_connections(int loginfd, int charfd, int shipfd) {
     int select_result = 0;
+    uint16_t ch2;
     fd_set readfds, writefds, exceptfds;
     int fd_max = 0;
     std::list<BANANA*>::const_iterator c, c_end;
@@ -4106,20 +4107,18 @@ void handle_connections(int loginfd, int charfd, int shipfd) {
 
         // Add our clients to the apropriate fd sets.
         for (c = client_connections.begin(), c_end = client_connections.end(); c != c_end; ++c) {
-            // TODO: Figure out what this is for and add/remove it as apropriate.
-            /*
-             if (workConnect->lastTick != (unsigned) servertime)
-             {
-             if (workConnect->lastTick > (unsigned) servertime)
-             ch2 = 1;
-             else
-             ch2 = 1 + ((unsigned) servertime - workConnect->lastTick);
-             workConnect->lastTick = (unsigned) servertime;
-             workConnect->packetsSec /= ch2;
-             workConnect->toBytesSec /= ch2;
-             workConnect->fromBytesSec /= ch2;
-             }
-             */
+
+            // TODO: Figure out what this is for.
+            if ((*c)->lastTick != (unsigned) servertime) {
+                if (workConnect->lastTick > (unsigned) servertime)
+                    ch2 = 1;
+                else
+                    ch2 = 1 + ((unsigned) servertime - workConnect->lastTick);
+                (*c)->lastTick = (unsigned) servertime;
+                (*c)->packetsSec /= ch2;
+                (*c)->toBytesSec /= ch2;
+                (*c)->fromBytesSec /= ch2;
+            }
             
             FD_SET((*c)->plySockfd, &readfds);
             FD_SET((*c)->plySockfd, &exceptfds);
