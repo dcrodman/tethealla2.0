@@ -4285,30 +4285,17 @@ void print_programinfo() {
 ********************************************************/
 
 int main( int argc, char * argv[] ) {
-	unsigned ch,ch2;
-	struct sockaddr_in listen_in;
-	unsigned listen_length;
+	unsigned ch;
 	int login_sockfd = -1, character_sockfd = -1, ship_sockfd = -1;
-	int pkt_len, pkt_c, bytes_sent;
-	unsigned short this_packet;
-	unsigned ship_this_packet;
-
-    print_programinfo();
-
-    timeval select_timeout = {
-        0,
-        5000
-    };
-
 	FILE* fp;
-	unsigned connectNum, shipNum;
 
 	dp[0] = 0;
 	memset (&dp[0], 0, sizeof (dp));
 
-
 	srand ( (unsigned) time(NULL) );
 	memset ( &dress_flags[0], 0, sizeof (DRESSFLAG) * MAX_DRESS_FLAGS);
+
+    print_programinfo();
 
 	printf ("Loading configuration from %s...", CFG_NAME);
 	load_config();
