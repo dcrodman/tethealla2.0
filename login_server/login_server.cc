@@ -52,7 +52,7 @@ extern "C" {
 #include "login_server.h"
 
 #define MAX_SIMULTANEOUS_CONNECTIONS 6
-// TODO: Use these
+// TODO: Use these?
 #define LOGIN_COMPILED_MAX_CONNECTIONS 300
 #define SHIP_COMPILED_MAX_CONNECTIONS 50
 
@@ -108,6 +108,9 @@ static std::uniform_int_distribution<uint8_t> dist(0, 255);
 
 std::list<BANANA*> client_connections;
 std::list<ORANGE*> ship_connections;
+
+mysql_config db_config;
+login_config server_config;
 
 void debug(const char *fmt, ...);
 void debug_perror(const char * msg);
@@ -188,29 +191,6 @@ const unsigned char PacketEE[] = {
 unsigned char E2_Base[2808] = { 0 };
 unsigned char PacketE2Data[2808] = { 0 };
 
-
-/* Populated by load_config_file(): */
-
-char *mySQL_Host;
-char *mySQL_Username;
-char *mySQL_Password;
-char *mySQL_Database;
-unsigned int mySQL_Port;
-unsigned char serverIPN[4]; // network-presentation of the IP
-char* serverIP;
-unsigned short serverPort;
-int override_on = 0;
-unsigned char overrideIP[4];
-unsigned short serverMaxConnections;
-unsigned short serverMaxShips;
-unsigned serverNumConnections = 0;
-unsigned serverConnectionList[LOGIN_COMPILED_MAX_CONNECTIONS];
-unsigned serverNumShips = 0;
-unsigned serverShipList[SHIP_COMPILED_MAX_CONNECTIONS];
-unsigned quest_numallows;
-unsigned* quest_allow;
-unsigned max_ship_keys = 0;
-
 /* Rare table structure */
 
 unsigned rt_tables_ep1[0x200 * 10 * 4] = {0};
@@ -219,8 +199,11 @@ unsigned rt_tables_ep4[0x200 * 10 * 4] = {0};
 
 unsigned mob_rate[8]; // rare appearance rate
 
-char Welcome_Message[255] = {0};
 time_t servertime;
+
+// TODO: Get rid of these.
+unsigned serverShipList[SHIP_COMPILED_MAX_CONNECTIONS];
+unsigned serverConnectionList[LOGIN_COMPILED_MAX_CONNECTIONS];
 
 MYSQL * myData;
 char myQuery[0x10000] = {0};
@@ -649,16 +632,16 @@ int load_config() {
             "{s:{s:s, s:s, s:s, s:i, s:s}, s:s, s:i, s:s, s:i, s:i, "
             "s:{s:i, s:i, s:i, s:i, s:i, s:i, s:i, s:i}, s:s, s:s, s:s}",
             "mysql",
-            "username", &mySQL_Username,
-            "password", &mySQL_Password,
-            "host", &mySQL_Host,
-            "port", &mySQL_Port,
-            "database", &mySQL_Database,
-            "server_ip", &serverIP,
-            "server_port", &serverPort,
-            "welcome_message", &Welcome_Message[0],
-            "max_client_connections", &serverMaxConnections,
-            "max_ship_connections" , &serverMaxShips,
+            "username", &db_config.username,
+            "password", &db_config.password,
+            "host", &db_config.host,
+            "port", &db_config.port,
+            "database", &db_config.database,
+            "server_ip", &server_config.serverIP,
+            "server_port", &server_config.serverPort,
+            "welcome_message", &server_config.welcome_message[0],
+            "max_client_connections", &server_config.serverMaxConnections,
+            "max_ship_connections" , &server_config.serverMaxShips,
             "rare_appearance_rates",
             "hildebear", &mob_rate[0],
             "rappy", &mob_rate[1],
@@ -677,7 +660,7 @@ int load_config() {
         return -1;
     }
 
-    inet_pton(AF_INET, serverIP, serverIPN);
+    inet_pton(AF_INET, server_config.serverIP, server_config.serverIPN);
     globalName = atoi(global_color);
     localName = atoi(global_color);
     normalName = atoi(normal_color);
@@ -703,7 +686,7 @@ void construct0xA0()
 	memcpy (&PacketA0Data[0x12], &serverName[0], 18 );
 	A0Offset = 0x36;
 	totalShips = 0x00;
-	for (ch=0;ch<serverNumShips;ch++)
+	for (ch=0;ch<server_config.serverNumShips;ch++)
 	{
 		shipNum = serverShipList[ch];
 		if (ships[shipNum])
@@ -756,58 +739,10 @@ void construct0xA0()
 	PacketA0Size = A0Offset;
 }
 
-
-/* Return a slot for a free connection or 0xFFFF if we're full. */
-unsigned free_connection()
-{
-	unsigned fc;
-	BANANA* wc;
-
-	for (fc=0;fc<serverMaxConnections;fc++)
-	{
-		wc = connections[fc];
-		if (wc->plySockfd<0)
-			return fc;
-	}
-	return 0xFFFF;
-}
-
-unsigned free_shipconnection()
-{
-	unsigned fc;
-	ORANGE* wc;
-
-	for (fc=0;fc<serverMaxShips;fc++)
-	{
-		wc = ships[fc];
-		if (wc->shipSockfd<0)
-			return fc;
-	}
-	return 0xFFFF;
-}
-
-
 /* "Reset" might be more accurate for this, but disconnect a client if they
  are connected and set all values of the connection to indicate that it's available. */
 void initialize_connection (BANANA* connect)
 {
-	unsigned ch, ch2;
-
-	if (connect->plySockfd >= 0)
-	{
-		ch2 = 0;
-		for (ch=0;ch<serverNumConnections;ch++)
-		{
-			if (serverConnectionList[ch] != connect->connection_index)
-				serverConnectionList[ch2++] = serverConnectionList[ch];
-		}
-		serverNumConnections = ch2;
-		close(connect->plySockfd);
-	}
-	memset (connect, 0, sizeof (BANANA));
-	connect->plySockfd = -1;
-	connect->lastTick = 0xFFFFFFFF;
-	connect->connected = 0xFFFFFFFF;
 }
 
 void initialize_ship (ORANGE* ship)
@@ -816,16 +751,16 @@ void initialize_ship (ORANGE* ship)
 
 	if (ship->shipSockfd >= 0)
 	{
-		if ( ( ship->key_index ) && ( ship->key_index <= max_ship_keys ) && ( keys_in_use [ ship->key_index ] ) )
+		if ( ( ship->key_index ) && ( ship->key_index <= server_config.max_ship_keys ) && ( keys_in_use [ ship->key_index ] ) )
 			keys_in_use [ ship->key_index ] = 0; // key no longer in use
 
 		ch2 = 0;
-		for (ch=0;ch<serverNumShips;ch++)
+		for (ch=0;ch<server_config.serverNumShips;ch++)
 		{
 			if (serverShipList[ch] != ship->connection_index)
 				serverShipList[ch2++] = serverShipList[ch];
 		}
-		serverNumShips = ch2;
+		server_config.serverNumShips = ch2;
 		close(ship->shipSockfd);
 	}
 	memset (ship, 0, sizeof (ORANGE) );
@@ -846,7 +781,7 @@ void start_encryption(BANANA* connect)
 
 	c3 = 0;
 
-	for (c=0;c<serverNumConnections;c++)
+	for (c=0;c<server_config.serverNumConnections;c++)
 	{
 		connectNum = serverConnectionList[c];
 		workConnect = connections[connectNum];
@@ -863,7 +798,7 @@ void start_encryption(BANANA* connect)
 		c4 = 0xFFFFFFFF;
 		c5 = NULL;
         // TODO: Iterate over connections list instead of array.
-		for (c=0;c<serverNumConnections;c++)
+		for (c=0;c<server_config.serverNumConnections;c++)
 		{
 			connectNum = serverConnectionList[c];
 			workConnect = connections[connectNum];
@@ -1728,7 +1663,7 @@ void ShipSend02 (unsigned char result, ORANGE* ship)
 	si = 0xFFFFFFFF;
 	if ( result == 0x01 )
 	{
-		for (ch=0;ch<serverNumShips;ch++)
+		for (ch=0;ch<server_config.serverNumShips;ch++)
 		{
 			shipNum = serverShipList[ch];
 			tempShip = ships[shipNum];
@@ -1743,9 +1678,9 @@ void ShipSend02 (unsigned char result, ORANGE* ship)
 	}
 	*(unsigned *) &ship->encryptbuf[0x02] = si;
 	*(unsigned *) &ship->encryptbuf[0x06] = *(unsigned *) &ship->shipAddr[0];
-	*(unsigned *) &ship->encryptbuf[0x0A] = quest_numallows;
-	memcpy (&ship->encryptbuf[0x0E], quest_allow, quest_numallows * 4 );
-	si = 0x0E + ( quest_numallows * 4 );
+	*(unsigned *) &ship->encryptbuf[0x0A] = server_config.quest_numallows;
+	memcpy (&ship->encryptbuf[0x0E], server_config.quest_allow, server_config.quest_numallows * 4 );
+	si = 0x0E + ( server_config.quest_numallows * 4 );
 	*(unsigned *) &ship->encryptbuf[si] = normalName;
 	si += 4;
 	*(unsigned *) &ship->encryptbuf[si] = localName;
@@ -1784,7 +1719,7 @@ void ShipSend0D (unsigned char command, ORANGE* ship)
 			memcpy (&ship->encryptbuf[0x06], &PacketA0Data[0], tempdw);
 			ship->encryptbuf[0x01] = 0x01;
 			tempdw += 6;
-			for (ch=0;ch<serverNumShips;ch++)
+			for (ch=0;ch<server_config.serverNumShips;ch++)
 			{
 				shipNum = serverShipList[ch];
 				tship = ships[shipNum];
@@ -2032,12 +1967,12 @@ void ShipProcessPacket (ORANGE* ship)
 
 							myResult = mysql_store_result ( myData );
 							key_rows = (int) mysql_num_rows ( myResult );
-							max_ship_keys = 0;
+							server_config.max_ship_keys = 0;
 							while ( key_rows )
 							{
 								myRow = mysql_fetch_row ( myResult );
-								if ( (unsigned) atoi ( myRow[1] ) > max_ship_keys )
-									max_ship_keys = atoi ( myRow[1] );
+								if ( (unsigned) atoi ( myRow[1] ) > server_config.max_ship_keys )
+									server_config.max_ship_keys = atoi ( myRow[1] );
 								key_rows --;
 							}
 							mysql_free_result ( myResult );
@@ -2049,7 +1984,7 @@ void ShipProcessPacket (ORANGE* ship)
 						}
 
 
-						if ( ( ship->key_index ) && ( ship->key_index <= max_ship_keys ) )
+						if ( ( ship->key_index ) && ( ship->key_index <= server_config.max_ship_keys ) )
 						{
 							if ( keys_in_use [ ship->key_index ] )  // key already in use?
 							{
@@ -2664,7 +2599,7 @@ void ShipProcessPacket (ORANGE* ship)
 				if ( gc_exists )
 				{
 					// OK!  Let's tell the ships to do the search...
-					for (ch=0;ch<serverNumShips;ch++)
+					for (ch=0;ch<server_config.serverNumShips;ch++)
 					{
 						shipNum = serverShipList[ch];
 						tship = ships[shipNum];
@@ -2678,7 +2613,7 @@ void ShipProcessPacket (ORANGE* ship)
 			// Got a hit on a guild search
 			cv = *(unsigned*) &ship->decryptbuf[0x0A];
 			cv--;
-			if (cv < serverMaxShips)
+			if (cv < server_config.serverMaxShips)
 			{
 				ORANGE* tship;
 
@@ -2738,7 +2673,7 @@ void ShipProcessPacket (ORANGE* ship)
 				if ( gc_exists )
 				{
 					// OK!  Let's tell the ships to do the search...
-					for (ch=0;ch<serverNumShips;ch++)
+					for (ch=0;ch<server_config.serverNumShips;ch++)
 					{
 						shipNum = serverShipList[ch];
 						tship = ships[shipNum];
@@ -2909,7 +2844,7 @@ void ShipProcessPacket (ORANGE* ship)
 				size -= 4;
 
 				// Just pass the packet along...
-				for (ch=0;ch<serverNumShips;ch++)
+				for (ch=0;ch<server_config.serverNumShips;ch++)
 				{
 					shipNum = serverShipList[ch];
 					tship = ships[shipNum];
@@ -3119,7 +3054,7 @@ void ShipProcessPacket (ORANGE* ship)
 			updateID = *(unsigned *) &ship->decryptbuf[0x06];
 			updateID--;
 
-			if ( updateID < serverMaxShips )
+			if ( updateID < server_config.serverMaxShips )
 				ships[updateID]->playerCount = *(unsigned *) &ship->decryptbuf[0x0A];
 
 			construct0xA0();
@@ -3168,7 +3103,7 @@ void ShipProcessPacket (ORANGE* ship)
 			size -= 4;
 
 			// Just pass the packet along...
-			for (ch=0;ch<serverNumShips;ch++)
+			for (ch=0;ch<server_config.serverNumShips;ch++)
 			{
 				shipNum = serverShipList[ch];
 				tship = ships[shipNum];
@@ -3212,7 +3147,7 @@ void CharacterProcessPacket (BANANA* client)
 			ORANGE* tship;
 
 			selected = *(unsigned *) &client->decryptbuf[0x0C];
-			for (ch=0;ch<serverNumShips;ch++)
+			for (ch=0;ch<server_config.serverNumShips;ch++)
 			{
 				shipNum = serverShipList[ch];
 				tship = ships[shipNum];
@@ -3421,7 +3356,7 @@ void CharacterProcessPacket (BANANA* client)
 						client->lastTick = (unsigned) servertime;
 						SendB1 (client);
 						SendA0 (client);
-						SendEE (&Welcome_Message[0], client);
+						SendEE (&server_config.welcome_message[0], client);
 					}
 				}
 				break;
@@ -3557,7 +3492,7 @@ void LoginProcessPacket (BANANA* client)
 
 	switch (client->decryptbuf[0x02])
 	{
-	case 0x05:
+	case 0x05: // Done
 		printf ("Client has closed the connection.\n");
 		client->todc = 1;
 		break;
@@ -3636,7 +3571,7 @@ void LoginProcessPacket (BANANA* client)
 
 				// If guild card is connected to the login server already, disconnect it.
 
-				for (ch=0;ch<serverNumConnections;ch++)
+				for (ch=0;ch<server_config.serverNumConnections;ch++)
 				{
 					connectNum = serverConnectionList[ch];
 					if (connections[connectNum]->guildcard == gcn)
@@ -3649,7 +3584,7 @@ void LoginProcessPacket (BANANA* client)
 
 				// If guild card is connected to ships, disconnect it.
 
-				for (ch=0;ch<serverNumShips;ch++)
+				for (ch=0;ch<server_config.serverNumShips;ch++)
 				{
 					shipNum = serverShipList[ch];
 					tship = ships[shipNum];
@@ -3683,7 +3618,12 @@ void LoginProcessPacket (BANANA* client)
 				//cipher_ptr = &client->server_cipher;
 				encryptcopy (client, &client->encryptbuf[0], sizeof (PacketE6));
 
-				Send19 (serverIPN[0], serverIPN[1], serverIPN[2], serverIPN[3], serverPort+1, client );
+				Send19 (server_config.serverIPN[0],
+                        server_config.serverIPN[1],
+                        server_config.serverIPN[2],
+                        server_config.serverIPN[3],
+                        server_config.serverPort+1,
+                        client );
 				for (ch=0;ch<MAX_DRESS_FLAGS;ch++)
 				{
 					if ((dress_flags[ch].guildcard == gcn) || ((unsigned) servertime - dress_flags[ch].flagtime > DRESS_FLAG_EXPIRY))
@@ -3734,7 +3674,7 @@ void LoadQuestAllow ()
 	unsigned char* qa;
 	FILE* fp;
 
-	quest_numallows = 0;
+	server_config.quest_numallows = 0;
 	if ( ( fp = fopen ("questitem.txt", "r" ) ) == NULL )
 	{
 		printf ("questitem.txt is missing.\n");
@@ -3747,17 +3687,17 @@ void LoadQuestAllow ()
 		while (fgets (&allow_data[0], 255, fp) != NULL)
 		{
 			if ((allow_data[0] != 35) && (strlen(&allow_data[0]) > 5))
-				quest_numallows++;
+				server_config.quest_numallows++;
 		}
-		quest_allow = (unsigned int*) malloc (quest_numallows * 4);
+		server_config.quest_allow = (unsigned int*) malloc (server_config.quest_numallows * 4);
 		ch = 0;
 		fseek ( fp, 0, SEEK_SET );
 		while (fgets (&allow_data[0], 255, fp) != NULL)
 		{
 			if ((allow_data[0] != 35) && (strlen(&allow_data[0]) > 5))
 			{
-				quest_allow[ch] = 0;
-				qa = (unsigned char*) &quest_allow[ch++];
+				server_config.quest_allow[ch] = 0;
+				qa = (unsigned char*) &server_config.quest_allow[ch++];
 				qa[0] = hexToByte (&allow_data[0]);
 				qa[1] = hexToByte (&allow_data[2]);
 				qa[2] = hexToByte (&allow_data[4]);
@@ -3765,7 +3705,7 @@ void LoadQuestAllow ()
 		}
 		fclose ( fp );
 	}
-	printf ("Number of quest item allowances: %u\n", quest_numallows);
+	printf ("Number of quest item allowances: %u\n", server_config.quest_numallows);
 }
 
 
@@ -4323,7 +4263,7 @@ int create_socket(const char* port, const addrinfo *hints) {
     int status = 0, sockfd;
     addrinfo *server;
 
-    if ((status = getaddrinfo(serverIP, port, hints, &server)) != 0) {
+    if ((status = getaddrinfo(server_config.serverIP, port, hints, &server)) != 0) {
         printf("getaddrinfo(): %s\n", gai_strerror(status));
         printf("Press any key to exit.\n");
         gets(&c);
@@ -4461,50 +4401,20 @@ int main( int argc, char * argv[] ) {
 #ifdef DEBUG_OUTPUT
 	printf ("\nMySQL connection parameters\n");
 	printf ("///////////////////////////\n");
-	printf ("Host: %s\n", mySQL_Host );
-	printf ("Port: %u\n", mySQL_Port );
-	printf ("Username: %s\n", mySQL_Username );
-	printf ("Password: %s\n", mySQL_Password );
-	printf ("Database: %s\n", mySQL_Database );
+	printf ("Host: %s\n", db_config.host );
+	printf ("Port: %u\n", db_config.port );
+	printf ("Username: %s\n", db_config.username );
+	printf ("Password: %s\n", db_config.password );
+	printf ("Database: %s\n", db_config.database );
 #endif
 	printf ("\nLogin server parameters\n");
 	printf ("///////////////////////\n");
-	if (override_on)
-		printf ("NOTE: IP override feature is turned on.\nThe server will bind to %u.%u.%u.%u but will send out the IP listed below.\n", overrideIP[0], overrideIP[1], overrideIP[2], overrideIP[3] );
-	printf ("IP: %s\n",  serverIP);
-	printf ("Login Port: %u\n", serverPort );
-	printf ("Character Port: %u\n", serverPort+1 );
-	printf ("Maximum Connections: %u\n", serverMaxConnections );
-	printf ("Maximum Ships: %u\n\n", serverMaxShips );
-	printf ("Allocating %lu bytes of memory for connections...", sizeof (BANANA) * serverMaxConnections );
-	for (ch=0;ch<serverMaxConnections;ch++)
-	{
-		connections[ch] = (st_banana*) malloc ( sizeof (BANANA) );
-		if ( !connections[ch] )
-		{
-			printf ("Out of memory!\n");
-			printf ("Hit [ENTER]");
-			gets (&dp[0]);
-			exit (1);
-		}
-		initialize_connection (connections[ch]);
-	}
-	printf (" OK!\n");
-	printf ("Allocating %lu bytes of memory for ships...", sizeof (ORANGE) * serverMaxShips );
-	memset (&ships, 0, 4 * serverMaxShips);
-	for (ch=0;ch<serverMaxShips;ch++)
-	{
-		ships[ch] = (st_orange*) malloc ( sizeof (ORANGE) );
-		if ( !ships[ch] )
-		{
-			printf ("Out of memory!\n");
-			printf ("Hit [ENTER]");
-			gets (&dp[0]);
-			exit (1);
-		}
-		initialize_ship (ships[ch]);
-	}
-	printf (" OK!\n\n");
+	printf ("IP: %s\n",  server_config.serverIP);
+	printf ("Login Port: %u\n", server_config.serverPort );
+	printf ("Character Port: %u\n", server_config.serverPort+1 );
+	printf ("Maximum Connections: %u\n", server_config.serverMaxConnections );
+	printf ("Maximum Ships: %u\n\n", server_config.serverMaxShips );
+
 	printf ("Constructing default ship list packet ...");
 	construct0xA0();
 	printf ("  OK!\n\n");
@@ -4512,18 +4422,18 @@ int main( int argc, char * argv[] ) {
 	printf ("Connecting up to the MySQL database ...");
 
 	if ( (myData = mysql_init((MYSQL*) 0)) && 
-		mysql_real_connect( myData, &mySQL_Host[0], &mySQL_Username[0], &mySQL_Password[0], NULL, mySQL_Port,
-		NULL, 0 ) )
+		mysql_real_connect(myData, &db_config.host[0], &db_config.username[0],
+            &db_config.password[0], NULL, db_config.port, NULL, 0))
 	{
-		if ( mysql_select_db( myData, &mySQL_Database[0] ) < 0 ) {
-			printf( "Can't select the %s database !\n", mySQL_Database ) ;
+		if ( mysql_select_db( myData, &db_config.database[0] ) < 0 ) {
+			printf( "Can't select the %s database !\n", db_config.database ) ;
 			mysql_close( myData ) ;
 			return 2 ;
 		}
 	}
 	else {
 		printf( "Can't connect to the mysql server (%s) on port %d !\nmysql_error = %s\n",
-			mySQL_Host, mySQL_Port, mysql_error(myData) ) ;
+			db_config.host, db_config.port, mysql_error(myData) ) ;
 
 		mysql_close( myData ) ;
 		return 1 ;
@@ -4547,15 +4457,15 @@ int main( int argc, char * argv[] ) {
 
 		myResult = mysql_store_result ( myData );
 		key_rows = (int) mysql_num_rows ( myResult );
-		max_ship_keys = 0;
+		server_config.max_ship_keys = 0;
 		while ( key_rows )
 		{
 			myRow = mysql_fetch_row ( myResult );
-			if ( (unsigned) atoi ( myRow[1] ) > max_ship_keys )
-				max_ship_keys = atoi ( myRow[1] );
+			if ( (unsigned) atoi ( myRow[1] ) > server_config.max_ship_keys )
+				server_config.max_ship_keys = atoi ( myRow[1] );
 			key_rows --;
 		}
-		printf ("(%u) ", max_ship_keys);
+		printf ("(%u) ", server_config.max_ship_keys);
 		mysql_free_result ( myResult );
 
 	}
@@ -4588,11 +4498,11 @@ int main( int argc, char * argv[] ) {
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
 
-    sprintf(port, "%d", serverPort);
+    sprintf(port, "%d", server_config.serverPort);
     printf ("Opening server login port %s for connections.\n", port);
 	login_sockfd = create_socket(port, &hints);
 
-    sprintf(port, "%d", serverPort + 1);
+    sprintf(port, "%d", server_config.serverPort + 1);
     printf ("Opening server character port %s for connections.\n", port);
     character_sockfd = create_socket(port, &hints);
 

@@ -13,6 +13,29 @@ extern "C" {
 
 const char Message03[] = { "Tethealla Gate v.047" };
 
+struct login_config {
+    unsigned char serverIPN[4]; // network-presentation of the IP
+    char* serverIP;
+    unsigned short serverPort;
+
+    unsigned short serverMaxConnections;
+    unsigned short serverMaxShips;
+    unsigned serverNumConnections = 0;
+    unsigned serverNumShips = 0;
+    unsigned quest_numallows;
+    unsigned* quest_allow;
+    unsigned max_ship_keys = 0;
+    char welcome_message[255];
+};
+
+struct mysql_config {
+    char *host;
+    char *username;
+    char *password;
+    char *database;
+    uint16_t port;
+};
+
 enum server_type {
     LOGIN,
     CHARACTER
