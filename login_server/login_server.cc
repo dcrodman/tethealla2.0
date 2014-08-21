@@ -98,6 +98,8 @@ login_config server_config;
 void debug(const char *fmt, ...);
 void debug_perror(const char * msg);
 
+void destroy_client(BANANA* client);
+
 /* Ship Packets */
 
 unsigned char ShipPacket00[] = {
@@ -753,51 +755,35 @@ void initialize_ship (ORANGE* ship)
 	construct0xA0(); // Removes inactive ships
 }
 
-void start_encryption(BANANA* connect)
+/* Ensure that a client has not connected more than MAX_SIMULTANEOUS_CONNECTIONS times.
+ If they have, mark the oldest connection as being ready to disconnect. */
+void limit_connections(BANANA* connect)
 {
-	unsigned c, c3, c4, connectNum;
-	BANANA *workConnect, *c5;
+	unsigned numConnections = 0, c4;
+	BANANA *c5;
+    std::list<BANANA*>::const_iterator c, c_end;
 
-	// Limit the number of connections from an IP address to MAX_SIMULTANEOUS_CONNECTIONS.
+    // Limit the number of connections from an IP address to MAX_SIMULTANEOUS_CONNECTIONS.
+    for (c = client_connections.begin(), c_end = client_connections.end(); c != c_end; ++c) {
+        if ((!strcmp((const char*)(*c)->IP_Address, (const char*)connect->IP_Address)))
+            numConnections++;
+    }
 
-	c3 = 0;
-
-	for (c=0;c<server_config.serverNumConnections;c++)
-	{
-		connectNum = serverConnectionList[c];
-		workConnect = connections[connectNum];
-		//debug ("%s comparing to %s", (char*) &workConnect->IP_Address[0], (char*) &connect->IP_Address[0]);
-		if ((!strcmp((const char*)&workConnect->IP_Address[0], (const char*)&connect->IP_Address[0])) &&
-			(workConnect->plySockfd >= 0))
-			c3++;
-	}
-
-	if (c3 > MAX_SIMULTANEOUS_CONNECTIONS)
-	{
-		// More than MAX_SIMULTANEOUS_CONNECTIONS connections from a certain IP address...
-		// Delete oldest connection to server.
+    // Delete the oldest connection to the server if there are more than
+    // MAX_SIMULTANEOUS_CONNECTIONS connections from a certain IP address.
+	if (numConnections > MAX_SIMULTANEOUS_CONNECTIONS) {
 		c4 = 0xFFFFFFFF;
 		c5 = NULL;
-        // TODO: Iterate over connections list instead of array.
-		for (c=0;c<server_config.serverNumConnections;c++)
-		{
-			connectNum = serverConnectionList[c];
-			workConnect = connections[connectNum];
-			if ((!strcmp((const char*) &workConnect->IP_Address[0], (const char*) &connect->IP_Address[0])) &&
-				(workConnect->plySockfd >= 0))
-			{
-				if (workConnect->connected < c4)
-				{
-					c4 = workConnect->connected;
-					c5 = workConnect;
-				}
-			}
-		}
-		if (c5)
-		{
-			workConnect = c5;
-			initialize_connection (workConnect);
-		}
+        for (c = client_connections.begin(), c_end = client_connections.end(); c != c_end; ++c) {
+            if ((!strcmp((const char*)(*c)->IP_Address, (const char*)connect->IP_Address)))
+                if ((*c)->connected < c4) {
+                    c4 = (*c)->connected;
+                    c5 = (*c);
+                }
+        }
+
+        if (c5)
+            c5->todc = true;
 	}
 }
 
@@ -3980,6 +3966,8 @@ BANANA* accept_client(int sockfd, server_type stype) {
 
     if (!send_bb_login_welcome(client, server_seed, client_seed))
         return NULL;
+
+    limit_connections(client);
 
     client->connected = (unsigned) servertime;
 	client->sendCheck[SEND_PACKET_03] = 1;
