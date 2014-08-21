@@ -11,8 +11,6 @@ if (DEBUGGING)
 endif(DEBUGGING)
 
 add_executable(login_server
-    clientmsg.h
-    servermsg.h
     login.h
     login_server.h
     login.cc
