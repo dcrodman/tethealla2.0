@@ -2,6 +2,7 @@
 #define tehealla_login_server_h
 
 #include <cstdlib>
+#include <mysql.h>
 
 extern "C" {
     #include "encryption.h"
@@ -34,6 +35,7 @@ struct mysql_config {
     char *password;
     char *database;
     uint16_t port;
+    MYSQL * myData;
 };
 
 enum server_type {
@@ -124,5 +126,7 @@ typedef struct st_orange {
 	unsigned last_ping;
 	int sent_ping;
 } ORANGE;
+
+void MDString (char *inString, char *outString);
 
 #endif

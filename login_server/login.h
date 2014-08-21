@@ -28,6 +28,8 @@
 #define BB_LOGIN_DISCONNECT 0x05
 
 const char BB_COPYRIGHT[] = "Phantasy Star Online Blue Burst Game Server. Copyright 1999-2004 SONICTEAM.";
+const char *PSO_CLIENT_VER_STRING = "TethVer12510";
+const int PSO_CLIENT_VER = 0x41;
 
 /* The BlueBurst header (8 bytes as opposed to 4). */
 struct bb_packet_header {
