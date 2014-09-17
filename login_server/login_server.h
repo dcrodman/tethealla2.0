@@ -11,8 +11,15 @@ extern "C" {
 #define TCP_BUFFER_SIZE 64000
 #define PACKET_BUFFER_SIZE ( TCP_BUFFER_SIZE * 16 )
 #define MAX_SENDCHECK 0x0B
+#define MAX_DRESS_FLAGS 500
+
+// TODO: Use these?
+#define MAX_SIMULTANEOUS_CONNECTIONS 6
+#define LOGIN_COMPILED_MAX_CONNECTIONS 300
+#define SHIP_COMPILED_MAX_CONNECTIONS 50
 
 const char Message03[] = { "Tethealla Gate v.047" };
+const int PSO_CLIENT_VER = 0x41;
 
 struct login_config {
     unsigned char serverIPN[4]; // network-presentation of the IP
@@ -126,7 +133,5 @@ typedef struct st_orange {
 	unsigned last_ping;
 	int sent_ping;
 } ORANGE;
-
-void MDString (char *inString, char *outString);
 
 #endif

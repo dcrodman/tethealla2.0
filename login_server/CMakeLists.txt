@@ -11,6 +11,10 @@ if (DEBUGGING)
 endif(DEBUGGING)
 
 add_executable(login_server
+	common.h
+	common.cc
+    packets.h
+    packets.cc
     login.h
     login_server.h
     login.cc

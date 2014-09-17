@@ -48,11 +48,7 @@ extern "C" {
 
 #include "login.h"
 #include "login_server.h"
-
-#define MAX_SIMULTANEOUS_CONNECTIONS 6
-// TODO: Use these?
-#define LOGIN_COMPILED_MAX_CONNECTIONS 300
-#define SHIP_COMPILED_MAX_CONNECTIONS 50
+#include "common.h"
 
 const int BACKLOG = 10;
 const char *SHIP_PORT = "3455";
@@ -60,7 +56,6 @@ const char *SHIP_PORT = "3455";
 #define MAX_EB02 800000
 #define SERVER_VERSION "0.048"
 #define MAX_ACCOUNTS 2000
-#define MAX_DRESS_FLAGS 500
 #define DRESS_FLAG_EXPIRY 7200
 
 //#define USEADDR_ANY
@@ -86,8 +81,8 @@ const char *SHIP_PORT = "3455";
 const char *CFG_NAME = "login_config.json";
 const char *LOCAL_DIR = "/usr/local/share/tethealla/config/";
 
-static std::mt19937 rand_gen(time(NULL));
-static std::uniform_int_distribution<uint8_t> dist(0, 255);
+std::mt19937 rand_gen(time(NULL));
+std::uniform_int_distribution<uint8_t> dist(0, 255);
 
 std::list<BANANA*> client_connections;
 std::list<ORANGE*> ship_connections;
@@ -154,11 +149,11 @@ unsigned char PacketE5[0x88] = { 0 };
 /* Security Packet */
 
 const unsigned char PacketE6[] = {
-0x44, 0x00, 0xE6, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x38, 0x3F, 0x71, 0x8D, 0x34, 0x37, 0x7A, 0xBD,
-0x67, 0x39, 0x65, 0x6B, 0x2C, 0xB1, 0xA5, 0x7C, 0x17, 0x93, 0x93, 0x29, 0x4A, 0x90, 0xE9, 0x11,
-0xB8, 0xB5, 0x0E, 0x77, 0x41, 0x30, 0x9B, 0x88, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-0x01, 0x01, 0x00, 0x00
+    0x44, 0x00, 0xE6, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x38, 0x3F, 0x71, 0x8D, 0x34, 0x37, 0x7A, 0xBD,
+    0x67, 0x39, 0x65, 0x6B, 0x2C, 0xB1, 0xA5, 0x7C, 0x17, 0x93, 0x93, 0x29, 0x4A, 0x90, 0xE9, 0x11,
+    0xB8, 0xB5, 0x0E, 0x77, 0x41, 0x30, 0x9B, 0x88, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x01, 0x01, 0x00, 0x00
 };
 
 /* Acknowledging client's expected checksum */
@@ -377,8 +372,6 @@ typedef struct st_dressflag {
 	unsigned flagtime;
 } DRESSFLAG;
 
-fd_set ReadFDs, WriteFDs, ExceptFDs;
-
 DRESSFLAG dress_flags[MAX_DRESS_FLAGS];
 char dp[TCP_BUFFER_SIZE*4];
 unsigned char tmprcv[PACKET_BUFFER_SIZE];
@@ -436,6 +429,14 @@ int send_to_client(BANANA *client, int len) {
     return 0;
 }
 
+void encryptcopy (BANANA* client, const unsigned char* src, unsigned size) {
+
+}
+
+void decryptcopy (unsigned char* dest, const unsigned char* src, unsigned size) {
+
+}
+
 void debug_perror( char * msg ) {
 	debug( "%s : %s\n" , msg , strerror(errno) );
 }
@@ -452,25 +453,6 @@ void debug(char *fmt, ...)
 	va_end (args);
 
 	fprintf( stderr, "%s", text);
-}
-
-/* Computes the message digest for string inString.
-   Prints out message digest, a space, the string (in quotes) and a
-   carriage return.
- */
-void MDString (char *inString, char *outString) {
-  unsigned char c;
-  MD5_CTX mdContext;
-  unsigned int len = strlen (inString);
-
-  MD5Init (&mdContext);
-  MD5Update (&mdContext, (unsigned char*)inString, len);
-  MD5Final (&mdContext);
-  for (c=0;c<16;c++)
-  {
-	  *outString = mdContext.digest[c];
-	  outString++;
-  }
 }
 
 unsigned char EBBuffer [0x10000];
@@ -755,38 +737,6 @@ void initialize_ship (ORANGE* ship)
 	construct0xA0(); // Removes inactive ships
 }
 
-/* Ensure that a client has not connected more than MAX_SIMULTANEOUS_CONNECTIONS times.
- If they have, mark the oldest connection as being ready to disconnect. */
-void limit_connections(BANANA* connect)
-{
-	unsigned numConnections = 0, c4;
-	BANANA *c5;
-    std::list<BANANA*>::const_iterator c, c_end;
-
-    // Limit the number of connections from an IP address to MAX_SIMULTANEOUS_CONNECTIONS.
-    for (c = client_connections.begin(), c_end = client_connections.end(); c != c_end; ++c) {
-        if ((!strcmp((const char*)(*c)->IP_Address, (const char*)connect->IP_Address)))
-            numConnections++;
-    }
-
-    // Delete the oldest connection to the server if there are more than
-    // MAX_SIMULTANEOUS_CONNECTIONS connections from a certain IP address.
-	if (numConnections > MAX_SIMULTANEOUS_CONNECTIONS) {
-		c4 = 0xFFFFFFFF;
-		c5 = NULL;
-        for (c = client_connections.begin(), c_end = client_connections.end(); c != c_end; ++c) {
-            if ((!strcmp((const char*)(*c)->IP_Address, (const char*)connect->IP_Address)))
-                if ((*c)->connected < c4) {
-                    c4 = (*c)->connected;
-                    c5 = (*c);
-                }
-        }
-
-        if (c5)
-            c5->todc = true;
-	}
-}
-
 void SendB1 (BANANA* client) {
     /* From Sylverant; generate the timestamp for this packet. */
 	struct timeval rawtime;
@@ -810,6 +760,7 @@ void SendB1 (BANANA* client) {
 		client->todc = 1;
 }
 
+// Re-implemented in login.cc.
 void Send1A (const char *mes, BANANA* client)
 {
 	unsigned short x1A_Len;
@@ -872,6 +823,7 @@ void SendEE (const char *mes, BANANA* client)
 	}
 }
 
+// Done
 void Send19 (unsigned char ip1, unsigned char ip2, unsigned char ip3, unsigned char ip4, unsigned short ipp, BANANA* client)
 {
 	memcpy ( &client->encryptbuf[0], &Packet19, sizeof (Packet19));
@@ -1656,16 +1608,6 @@ void ShipSend02 (unsigned char result, ORANGE* ship)
 	si += 4;
 	compressShipPacket ( ship, &ship->encryptbuf[0x00], si );
 }
-
-void ShipSend08 (unsigned gcn, ORANGE* ship)
-{
-	// Tell the other ships this user logged on and to disconnect him/her if they're still active...
-	ship->encryptbuf[0x00] = 0x08;
-	ship->encryptbuf[0x01] = 0x00;
-	*(unsigned *) &ship->encryptbuf[0x02] = gcn;
-	compressShipPacket ( ship, &ship->encryptbuf[0x00], 0x06 );
-}
-
 
 void ShipSend0D (unsigned char command, ORANGE* ship)
 {
@@ -3439,201 +3381,6 @@ void CharacterProcessPacket (BANANA* client)
 	}
 }
 
-void LoginProcessPacket (BANANA* client)
-{
-	char username[17];
-	char password[34];
-	long long security_sixtyfour_check;
-	char hwinfo[18];
-	unsigned short clientver;
-	char md5password[34] = {0};
-	unsigned char MDBuffer[17] = {0};
-	unsigned gcn;
-	unsigned ch,connectNum,shipNum;
-	ORANGE* tship;
-	char security_sixtyfour_binary[18];
-
-
-	/* Only packet we're expecting during the login is 0x93 and 0x05. */
-    printf("LoginProcessPacket: %d\n", client->decryptbuf[0x02]);
-
-	switch (client->decryptbuf[0x02])
-	{
-	case 0x05: // Done
-		printf ("Client has closed the connection.\n");
-		client->todc = 1;
-		break;
-	case 0x93:
-		if (!client->sendCheck[RECEIVE_PACKET_93])
-		{
-			int fail_to_auth = 0;
-			clientver = *(unsigned short*) &client->decryptbuf[0x10];
-			memcpy (&username[0], &client->decryptbuf[0x1C], 17 );
-			memcpy (&password[0], &client->decryptbuf[0x4C], 17 );
-			memset (&hwinfo[0], 0, 18);
-
-			mysql_real_escape_string ( db_config.myData, (char*)&hwinfo[0], (const char*) &client->decryptbuf[0x84], 8);
-			memcpy (&client->hwinfo[0], &hwinfo[0], 18);
-
-			sprintf (&myQuery[0], "SELECT * from account_data WHERE username='%s'", username );
-
-			// Check to see if that account already exists.
-			if ( ! mysql_query ( db_config.myData, &myQuery[0] ) )
-			{
-				int num_rows, max_fields;
-
-				myResult = mysql_store_result ( db_config.myData );
-				num_rows = (int) mysql_num_rows ( myResult );
-
-				if (num_rows)
-				{
-					myRow = mysql_fetch_row ( myResult );
-					max_fields = mysql_num_fields ( myResult );
-					sprintf (&password[strlen(password)], "_%s_salt", myRow[3] );
-					MDString ((char*)&password[0], (char*)&MDBuffer[0] );
-					for (ch=0;ch<16;ch++)
-						sprintf (&md5password[ch*2], "%02x", (unsigned char) MDBuffer[ch]);
-					md5password[32] = 0;
-					if (!strcmp(&md5password[0],myRow[1]))
-					{
-						if (!strcmp("1", myRow[8]))
-							fail_to_auth = 3;
-						if (!strcmp("1", myRow[9]))
-							fail_to_auth = 4;
-						if (!strcmp("0", myRow[10]))
-							fail_to_auth = 5;
-						if (!fail_to_auth)
-							gcn = atoi (myRow[6]);
-						if ((strcmp((char*)&client->decryptbuf[0x8C], PSO_CLIENT_VER_STRING) != 0) || (client->decryptbuf[0x10] != PSO_CLIENT_VER))
-							fail_to_auth = 7;
-						client->isgm = atoi (myRow[7]);
-		}
-					else
-						fail_to_auth = 2;
-				}
-				else
-					fail_to_auth = 2;
-				mysql_free_result ( myResult );
-			}
-			else
-				fail_to_auth = 1; // MySQL error.
-
-			// Hardware info ban check...
-
-			sprintf (&myQuery[0], "SELECT * from hw_bans WHERE hwinfo='%s'", hwinfo );
-			if ( ! mysql_query ( db_config.myData, &myQuery[0] ) )
-			{
-				myResult = mysql_store_result ( db_config.myData );
-				if ((int) mysql_num_rows ( myResult ))
-					fail_to_auth = 3;
-				mysql_free_result ( myResult );
-			}
-			else
-				fail_to_auth = 1;
-
-			switch (fail_to_auth)
-			{
-			case 0x00:
-				// OK
-
-				// If guild card is connected to the login server already, disconnect it.
-
-				for (ch=0;ch<server_config.serverNumConnections;ch++)
-				{
-					connectNum = serverConnectionList[ch];
-					if (connections[connectNum]->guildcard == gcn)
-					{
-						Send1A ("This account has just logged on.\n\nYou are now being disconnected.", connections[connectNum]);
-						connections[connectNum]->todc = 1;
-						break;
-					}
-				}
-
-				// If guild card is connected to ships, disconnect it.
-
-				for (ch=0;ch<server_config.serverNumShips;ch++)
-				{
-					shipNum = serverShipList[ch];
-					tship = ships[shipNum];
-					if ((tship->shipSockfd >= 0) && (tship->authed == 1))
-						ShipSend08 (gcn, tship);
-				}
-
-
-				memcpy (&client->encryptbuf[0], &PacketE6[0], sizeof (PacketE6));
-				*(unsigned *) &client->encryptbuf[0x10] = gcn;
-				
-				// Store some security shit
-				for (ch=0;ch<8;ch++)
-					client->encryptbuf[0x38+ch] = (unsigned char) rand() % 255;
-				
-				security_sixtyfour_check = *(long long*) &client->encryptbuf[0x38];
-
-				// Nom, nom, nom.
-
-				sprintf (&myQuery[0], "DELETE from security_data WHERE guildcard = '%u'", gcn );
-				mysql_query ( db_config.myData, &myQuery[0] );
-				mysql_real_escape_string ( db_config.myData, &security_sixtyfour_binary[0], (char*) &security_sixtyfour_check, 8);
-				sprintf (&myQuery[0], "INSERT INTO security_data (guildcard, thirtytwo, sixtyfour, isgm) VALUES ('%u','0','%s', '%u')", gcn, (char*) &security_sixtyfour_binary, client->isgm );
-				if ( mysql_query ( db_config.myData, &myQuery[0] ) )
-				{
-					Send1A ("Couldn't update security information in MySQL database.\nPlease contact the server administrator.", client);
-					client->todc = 1;
-					return;
-				}
-
-				//cipher_ptr = &client->server_cipher;
-				encryptcopy (client, &client->encryptbuf[0], sizeof (PacketE6));
-
-				Send19 (server_config.serverIPN[0],
-                        server_config.serverIPN[1],
-                        server_config.serverIPN[2],
-                        server_config.serverIPN[3],
-                        server_config.serverPort+1,
-                        client );
-				for (ch=0;ch<MAX_DRESS_FLAGS;ch++)
-				{
-					if ((dress_flags[ch].guildcard == gcn) || ((unsigned) servertime - dress_flags[ch].flagtime > DRESS_FLAG_EXPIRY))
-						 dress_flags[ch].guildcard = 0;
-				}
-				break;
-			case 0x01:
-				// MySQL error.
-				Send1A ("There is a problem with the MySQL database.\n\nPlease contact the server administrator.", client);
-				break;
-			case 0x02:
-				// Username or password incorrect.
-				Send1A ("Username or password is incorrect.", client);
-				break;
-			case 0x03:
-				// Account is banned.
-				Send1A ("You are banned from this server.", client);
-				break;
-			case 0x04:
-				// Already logged on.
-				Send1A ("This account is already logged on.\n\nPlease wait 120 seconds and try again.", client);
-				break;
-			case 0x05:
-				// Account has not completed e-mail validation.
-				Send1A ("Please complete the registration of this account through\ne-mail validation.\n\nThank you.", client);
-				break;
-			case 0x07:
-				// Client version too old.
-				Send1A ("Your client executable is too old.\nPlease update your client through the patch server.", client);
-				break;
-			default:
-				Send1A ("Unknown error.", client);
-				break;
-			}
-			client->sendCheck[RECEIVE_PACKET_93] = 0x01;
-		}
-		break;
-	default:
-		client->todc = 1;
-		break;
-	}
-}
-
 void LoadQuestAllow ()
 {
 	unsigned ch;
@@ -4002,10 +3749,10 @@ void handle_connections(int loginfd, int charfd, int shipfd) {
 
             // TODO: Figure out what this is for.
             if ((*c)->lastTick != (unsigned) servertime) {
-                if (workConnect->lastTick > (unsigned) servertime)
+                if ((*c)->lastTick > (unsigned) servertime)
                     ch2 = 1;
                 else
-                    ch2 = 1 + ((unsigned) servertime - workConnect->lastTick);
+                    ch2 = 1 + ((unsigned) servertime - (*c)->lastTick);
                 (*c)->lastTick = (unsigned) servertime;
                 (*c)->packetsSec /= ch2;
                 (*c)->toBytesSec /= ch2;
@@ -4105,6 +3852,7 @@ void handle_connections(int loginfd, int charfd, int shipfd) {
                 if ((*c)->todc) {
                     // TODO: Send whatever remaining data we have to the client.
                     destroy_client(*c);
+                    close((*c)->plySockfd);
                     client_connections.erase(c++);
                 }
             }
@@ -4502,156 +4250,4 @@ void debug(const char *fmt, ...)
 	va_end (args);
 
 	fprintf( stderr, "%s", text);
-}
-
-void encryptcopy (BANANA* client, const unsigned char* src, unsigned size)
-{
-	unsigned char* dest;
-
-	if (TCP_BUFFER_SIZE - client->snddata < ( (int) size + 7 ) )
-		client->todc = 1;
-	else
-	{
-		dest = &client->sndbuf[client->snddata];
-		memcpy (dest,src,size);
-		while (size % 8)
-			dest[size++] = 0x00;
-		client->snddata += (int) size;
-        CRYPT_CryptData(&workConnect->server_cipher, dest, size, 1);
-	}
-}
-
-
-void decryptcopy (unsigned char* dest, const unsigned char* src, unsigned size)
-{
-	memcpy (dest,src,size);
-    CRYPT_CryptData(&workConnect->client_cipher, dest, size, 0);
-    printf("Received %u bytes from client %s\n", size, workConnect->IP_Address);
-    print_payload(dest, size);
-    printf("\n");
-}
-
-/* expand a key (makes a rc4_key) */
-
-void prepare_key(unsigned char *keydata, unsigned len, struct rc4_key *key)
-{
-    unsigned index1, index2, counter;
-    unsigned char *state;
-
-    state = key->state;
-
-    for (counter = 0; counter < 256; counter++)
-        state[counter] = counter;
-
-    key->x = key->y = index1 = index2 = 0;
-
-    for (counter = 0; counter < 256; counter++) {
-        index2 = (keydata[index1] + state[counter] + index2) & 255;
-
-        /* swap */
-        state[counter] ^= state[index2];
-        state[index2]  ^= state[counter];
-        state[counter] ^= state[index2];
-
-        index1 = (index1 + 1) % len;
-    }
-}
-
-/* reversible encryption, will encode a buffer updating the key */
-
-void rc4(unsigned char *buffer, unsigned len, struct rc4_key *key)
-{
-    unsigned x, y, xorIndex, counter;
-    unsigned char *state;
-
-    /* get local copies */
-    x = key->x; y = key->y;
-    state = key->state;
-
-    for (counter = 0; counter < len; counter++) {
-        x = (x + 1) & 255;
-        y = (state[x] + y) & 255;
-
-        /* swap */
-        state[x] ^= state[y];
-        state[y] ^= state[x];
-        state[x] ^= state[y];
-
-        xorIndex = (state[y] + state[x]) & 255;
-
-        buffer[counter] ^= state[xorIndex];
-    }
-
-    key->x = x; key->y = y;
-}
-
-void compressShipPacket ( ORANGE* ship, unsigned char* src, unsigned long src_size )
-{
-	unsigned char* dest;
-	unsigned long result;
-
-	if (ship->shipSockfd >= 0)
-	{
-		if (PACKET_BUFFER_SIZE - ship->snddata < (int) ( src_size + 100 ) )
-			initialize_ship(ship);
-		else
-		{
-			if ( ship->crypt_on )
-			{
-				dest = &ship->sndbuf[ship->snddata];
-				// Store the original packet size before RLE compression at offset 0x04 of the new packet.
-				dest += 4;
-				*(unsigned *) dest = src_size;
-				// Compress packet using RLE, storing at offset 0x08 of new packet.
-				//
-				// result = size of RLE compressed data + a DWORD for the original packet size.
-				result = RleEncode (src, dest+4, src_size) + 4;
-				// Encrypt with RC4
-				rc4 (dest, result, &ship->sc_key);
-				// Increase result by the size of a DWORD for the final ship packet size.
-				result += 4;
-				// Copy it to the front of the packet.
-				*(unsigned *) &ship->sndbuf[ship->snddata] = result;
-				ship->snddata += (int) result;
-			}
-			else
-			{
-				memcpy ( &ship->sndbuf[ship->snddata+4], src, src_size );
-				src_size += 4;
-				*(unsigned *) &ship->sndbuf[ship->snddata] = src_size;
-				ship->snddata += src_size;
-			}
-		}
-	}
-}
-
-void decompressShipPacket ( ORANGE* ship, unsigned char* dest, unsigned char* src )
-{
-	unsigned src_size, dest_size;
-	unsigned char *srccpy;
-
-	if (ship->crypt_on)
-	{
-		src_size = *(unsigned *) src;
-		src_size -= 8;
-		src += 4;
-		srccpy = src;
-		// Decrypt RC4
-		rc4 (src, src_size+4, &ship->cs_key);
-		// The first four bytes of the src should now contain the expected uncompressed data size.
-		dest_size = *(unsigned *) srccpy;
-		// Increase expected size by 4 before inserting into the destination buffer.  (To take account for the packet
-		// size DWORD...)
-		dest_size += 4;
-		*(unsigned *) dest = dest_size;
-		// Decompress the data...
-		RleDecode (srccpy+4, dest+4, src_size);
-	}
-	else
-	{
-		src_size = *(unsigned *) src;
-		memcpy (dest + 4, src + 4, src_size);
-		src_size += 4;
-		*(unsigned *) dest = src_size;
-	}
 }
