@@ -7,10 +7,12 @@
 		"database" : "tethealla_test"
 	},
 	"server_ip" : "127.0.0.1",
-	"server_port" : 12000,
+	"login_port" : 12000,
+	"ship_port" : 13000,
 	"welcome_message" : "Unconfigured",
-	"max_client_connections" : 1000,
-	"max_ship_connections" : 1,
+	"config_dir" : "/usr/local/share/tethealla/login/",
+	"max_client_connections" : 10000,
+	"max_ship_connections" : 5,
 	"rare_appearance_rates" : {
 		"hildebear" : 7,
 		"rappy" : 8,

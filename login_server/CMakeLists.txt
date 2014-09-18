@@ -11,13 +11,9 @@ if (DEBUGGING)
 endif(DEBUGGING)
 
 add_executable(login_server
-	common.h
-	common.cc
-    packets.h
-    packets.cc
-    login.h
+	packets.h
+	packets.cc
     login_server.h
-    login.cc
     login_server.cc)
 
 # Allow patch_server to be built by itself by including the exported

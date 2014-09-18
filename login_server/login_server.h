@@ -1,31 +1,20 @@
-#ifndef tehealla_login_server_h
-#define tehealla_login_server_h
+#ifndef __tehealla_login_server_h__
+#define __tehealla_login_server_h__
 
-#include <cstdlib>
-#include <mysql.h>
+#define TCP_BUFFER_SIZE 64000
+#define PACKET_BUFFER_SIZE ( TCP_BUFFER_SIZE * 16 )
 
 extern "C" {
     #include "encryption.h"
 }
 
-#define TCP_BUFFER_SIZE 64000
-#define PACKET_BUFFER_SIZE ( TCP_BUFFER_SIZE * 16 )
-#define MAX_SENDCHECK 0x0B
-#define MAX_DRESS_FLAGS 500
-
-// TODO: Use these?
-#define MAX_SIMULTANEOUS_CONNECTIONS 6
-#define LOGIN_COMPILED_MAX_CONNECTIONS 300
-#define SHIP_COMPILED_MAX_CONNECTIONS 50
-
-const char Message03[] = { "Tethealla Gate v.047" };
-const int PSO_CLIENT_VER = 0x41;
-
 struct login_config {
     unsigned char serverIPN[4]; // network-presentation of the IP
-    char* serverIP;
-    unsigned short serverPort;
-
+    char* server_ip;
+    unsigned short login_port;
+    unsigned short ship_port;
+    char *config_dir;
+    
     unsigned short serverMaxConnections;
     unsigned short serverMaxShips;
     unsigned serverNumConnections = 0;
@@ -45,93 +34,45 @@ struct mysql_config {
     MYSQL * myData;
 };
 
-enum server_type {
+enum server_session {
     LOGIN,
     CHARACTER
 };
 
-/* Player Structure */
-
-typedef struct st_banana {
-	int plySockfd;  // client's socket fd
-	server_type session;  // are we connected to LOGIN or CHARACTER?
-
+struct login_client {
+    int socket;
+    server_session session;
+    unsigned char IP_address[16];
+    int port;
+    
+    CRYPT_SETUP client_cipher, server_cipher;
+    
     unsigned char send_buffer[TCP_BUFFER_SIZE];
     unsigned int send_size;
-
     unsigned char recv_buffer[TCP_BUFFER_SIZE];
     unsigned int recv_size;
     unsigned int packet_sz;
-
-	unsigned char decryptbuf [TCP_BUFFER_SIZE];
-	unsigned char sndbuf [TCP_BUFFER_SIZE]; // our buffer of data to send (used directly)
-	unsigned char encryptbuf [TCP_BUFFER_SIZE]; // where send data is dumped before encryption
-	int snddata, sndwritten; // how much data we have to send and how much we have sent
-	unsigned char packet [TCP_BUFFER_SIZE]; // our current working packet
-	unsigned short packetdata; // size of our current working packet?
-	unsigned short packetread;
-
-	CRYPT_SETUP server_cipher, client_cipher; // client/server keys
-	unsigned guildcard;
-	char guildcard_string[12];
-	unsigned char guildcard_data[20000];
-	int sendingchars;
-	short slotnum;
-	unsigned lastTick;		// The last second
-	unsigned toBytesSec;	// How many bytes per second the server sends to the client
-	unsigned fromBytesSec;	// How many bytes per second the server receives from the client
-	unsigned packetsSec;	// How many packets per second the server receives from the client
-	unsigned connected;
-	unsigned char sendCheck[MAX_SENDCHECK+2];
-	int todc; // this this client about to be disconnected?
-	unsigned char IP_Address[16];
-    int port;
-    bool ipv6;
-	char hwinfo[18];
-	int isgm;
-	int dress_flag;
-	unsigned connection_index; // corresponds to index in connection list
-} BANANA;
-
-/* a RC4 expanded key session */
-struct rc4_key {
-    unsigned char state[256];
-    unsigned x, y;
+    
+    unsigned int connected;
+    bool todc;
 };
 
-/* Ship Structure */
-
-typedef struct st_orange {
-	int shipSockfd;
-	unsigned char name[13];
-	unsigned playerCount;
-	unsigned char shipAddr[5];
-	unsigned char listenedAddr[4];
-	unsigned short shipPort;
-	unsigned char rcvbuf [TCP_BUFFER_SIZE];
-	unsigned long rcvread;
-	unsigned long expect;
-	unsigned char decryptbuf [TCP_BUFFER_SIZE];
-	unsigned char sndbuf [PACKET_BUFFER_SIZE];
-	unsigned char encryptbuf [TCP_BUFFER_SIZE];
-	unsigned char packet [PACKET_BUFFER_SIZE];
-	unsigned long packetread;
-	unsigned long packetdata;
-	int snddata,
-    sndwritten;
-	unsigned shipID;
-	int authed;
-	int todc;
-	int crypt_on;
-	unsigned char user_key[128];
-	int key_change[128];
-	unsigned key_index;
-	struct rc4_key cs_key; // Encryption keys
-	struct rc4_key sc_key; // Encryption keys
-	unsigned connection_index;
-	unsigned connected;
-	unsigned last_ping;
-	int sent_ping;
-} ORANGE;
+struct ship_server {
+    int socket;
+    unsigned char name[13];
+    bool authenticated;
+    
+    unsigned char send_buffer[TCP_BUFFER_SIZE];
+    unsigned int send_size;
+    
+    unsigned char recv_buffer[TCP_BUFFER_SIZE];
+    unsigned int recv_size;
+    unsigned int packet_sz;
+    
+    bool sent_ping;
+    unsigned int last_ping;
+    unsigned int connected;
+    bool todc;
+};
 
 #endif
