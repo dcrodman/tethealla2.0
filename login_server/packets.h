@@ -9,6 +9,8 @@
 #ifndef tethealla_packets_h
 #define tethealla_packets_h
 
+#include "login_server.h"
+
 /* Borrowed from Sylverant for reversing byte order of packets. */
 #if defined(WORDS_BIGENDIAN) || defined(__BIG_ENDIAN__)
     #define LE16(x) (((x >> 8) & 0xFF) | ((x & 0xFF) << 8))
@@ -21,9 +23,11 @@
     #define LE32(x) x
 #endif
 
-#define BB_HEADER_LEN 8
+const char BB_COPYRIGHT[] = "Phantasy Star Online Blue Burst Game Server. Copyright 1999-2004 SONICTEAM.";
 
 /* Packet types and sizes. */
+
+#define BB_HEADER_LEN 8
 
 #define BB_LOGIN_WELCOME_TYPE 0x03
 #define BB_LOGIN_WELCOME_SZ 0xC8
@@ -50,5 +54,22 @@ struct bb_login_welcome_pkt {
     uint8_t server_vector[48];
     uint8_t client_vector[48];
 };
+
+/* Login packet send to login and ship servers. */
+struct bb_login_pkt {
+    bb_packet_header header;
+    uint8_t unknown[8];
+    uint16_t client_version;
+    uint8_t unknown2[6];
+    uint32_t team_id;
+    char username[16];
+    uint8_t unused[32];
+    char password[16];
+    uint8_t unused2[28];
+    char hardware_info[8];
+    char version_string[28];
+};
+
+//bool send_bb_login_welcome(login_client* client, uint8_t s_seed[48], uint8_t c_seed[48]);
 
 #endif

@@ -7,5 +7,10 @@
 //
 
 #include <cstdint>
+#include <cstring>
+
+extern "C" {
+    #include "sniffex.h"
+}
 
 #include "packets.h"

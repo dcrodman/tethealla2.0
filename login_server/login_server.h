@@ -4,6 +4,8 @@
 #define TCP_BUFFER_SIZE 64000
 #define PACKET_BUFFER_SIZE ( TCP_BUFFER_SIZE * 16 )
 
+#include <mysql.h>
+
 extern "C" {
     #include "encryption.h"
 }
@@ -31,7 +33,7 @@ struct mysql_config {
     char *password;
     char *database;
     uint16_t port;
-    MYSQL * myData;
+    MYSQL* myData;
 };
 
 enum server_session {
@@ -45,6 +47,8 @@ struct login_client {
     unsigned char IP_address[16];
     int port;
     
+    uint32_t guildcard;
+    char hardware_info[18];
     CRYPT_SETUP client_cipher, server_cipher;
     
     unsigned char send_buffer[TCP_BUFFER_SIZE];

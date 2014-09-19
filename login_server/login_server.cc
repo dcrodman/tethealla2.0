@@ -8,14 +8,13 @@
 #include <netdb.h>
 #include <unistd.h>
 
-#include <mysql.h>
-
 #include "login_server.h"
 #include "packets.h"
 
 extern "C" {
     #include <jansson.h>
     #include "sniffex.h"
+    #include "md5.h"
 }
 
 #define DEBUG_OUTPUT
@@ -40,8 +39,31 @@ std::uniform_int_distribution<uint8_t> dist(0, 255);
 
 unsigned mob_rate[8]; // rare appearance rate
 
-int character_process_packet(login_client* client) {
+void MDString (char *inString, char *outString);
+int send_packet(login_client *client, int len);
+
+/* Send the welcome packet to the client when they connect to the login server.*/
+int send_bb_login_welcome(login_client* client, uint8_t s_seed[48], uint8_t c_seed[48]) {
+    bb_login_welcome_pkt *pkt = (bb_login_welcome_pkt*) client->send_buffer + client->send_size;
+    memset(pkt, 0, BB_LOGIN_WELCOME_SZ);
+
+    pkt->header.type = LE16(BB_LOGIN_WELCOME_TYPE);
+    pkt->header.length = LE16(BB_LOGIN_WELCOME_SZ);
+    strcpy(pkt->copyright, BB_COPYRIGHT);
+    memcpy(pkt->server_vector, s_seed, 48);
+    memcpy(pkt->client_vector, c_seed, 48);
+
+    client->send_size += BB_LOGIN_WELCOME_SZ;
     
+    printf("Sending BB Login Welcome\n");
+    print_payload((unsigned char*)pkt, BB_LOGIN_WELCOME_SZ);
+    printf("\n");
+
+    return send_packet(client, BB_LOGIN_WELCOME_SZ);
+}
+
+int character_process_packet(login_client* client) {
+    return 0;
 }
 
 /* Process a client packet sent to the LOGIN server. Returns 0 on success, 1
@@ -52,14 +74,14 @@ int login_process_packet(login_client* client) {
     header->type = LE16(header->type);
     header->length = LE16(header->length);
     
-    bool result;
+    int result = 0;
     switch (header->type) {
         case BB_LOGIN_DISCONNECT:
             client->todc = true;
             result = 0;
             break;
         case BB_LOGIN_LOGIN:
-            result = handle_login(client);
+            //result = handle_login(client);
             break;
         default:
             result = -1;
@@ -71,8 +93,7 @@ int login_process_packet(login_client* client) {
 /* Send the amount of data specified by len from the client's buffered to the client.
  * Returns -1 on error and 0 on success.
  */
-int send_to_client(login_client *client, int len) {
-    
+int send_packet(login_client *client, int len) {
     int total = 0, remaining = len;
     int bytes_sent;
     
@@ -80,12 +101,12 @@ int send_to_client(login_client *client, int len) {
         bytes_sent = send(client->socket, client->send_buffer + total, remaining, 0);
         if (bytes_sent == -1) {
             perror("send");
-            return false;
+            return -1;
         }
         total += bytes_sent;
         remaining -= bytes_sent;
     }
-    
+
     memmove(client->send_buffer, client->send_buffer + total, total);
     client->send_size -= total;
     
@@ -172,8 +193,7 @@ handle:
 /* Ensure that a client has not connected more than MAX_SIMULTANEOUS_CONNECTIONS times.
  * If they have, mark the oldest connection as being ready to disconnect.
  */
-void limit_connections(login_client* connect)
-{
+void limit_connections(login_client* connect) {
 	unsigned numConnections = 0, c4;
 	login_client *c5;
     std::list<login_client*>::const_iterator c, c_end;
@@ -263,10 +283,8 @@ login_client* accept_client(int sockfd, server_session stype) {
     CRYPT_CreateKeys(&client->server_cipher, server_seed, CRYPT_BLUEBURST);
     CRYPT_CreateKeys(&client->client_cipher, client_seed, CRYPT_BLUEBURST);
     
-    /*
-    if (!send_bb_login_welcome(client, server_seed, client_seed))
+    if (send_bb_login_welcome(client, server_seed, client_seed))
         return NULL;
-    */
     
     limit_connections(client);
     
@@ -744,8 +762,8 @@ int main(int argc, const char * argv[]) {
 		exit (1);
 	}
     
-    printf("Listening for client connections...\n");
-    
+    printf("\nListening for client connections...\n\n");
+    handle_connections(login_sockfd, character_sockfd, ship_sockfd);
 
     printf("\nClosing resources and shutting down server...\n");
     
@@ -753,4 +771,18 @@ int main(int argc, const char * argv[]) {
     close(character_sockfd);
     close(ship_sockfd);
     mysql_close(db_config.myData);
+}
+
+void MDString (char *inString, char *outString) {
+    unsigned char c;
+    MD5_CTX mdContext;
+    unsigned int len = strlen (inString);
+
+    MD5Init (&mdContext);
+    MD5Update (&mdContext, (unsigned char*)inString, len);
+    MD5Final (&mdContext);
+    for (c=0;c<16;c++) {
+        *outString = mdContext.digest[c];
+        outString++;
+    }
 }
