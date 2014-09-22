@@ -8,9 +8,9 @@
 	},
 	"server_ip" : "127.0.0.1",
 	"login_port" : 12000,
-	"ship_port" : 13000,
+	"ship_port" : 3455,
 	"welcome_message" : "Unconfigured",
-	"config_dir" : "/usr/local/share/tethealla/login/",
+	"config_dir" : "/usr/local/share/tethealla/",
 	"max_client_connections" : 10000,
 	"max_ship_connections" : 5,
 	"rare_appearance_rates" : {
