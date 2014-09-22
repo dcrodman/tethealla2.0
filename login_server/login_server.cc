@@ -8,10 +8,13 @@
 #include <netdb.h>
 #include <unistd.h>
 
+#include <iconv.h>
+
 #include "login_server.h"
 #include "packets.h"
 
 extern "C" {
+    #include <polarssl/sha256.h>
     #include <jansson.h>
     #include "sniffex.h"
     #include "md5.h"
@@ -39,7 +42,6 @@ std::uniform_int_distribution<uint8_t> dist(0, 255);
 
 unsigned mob_rate[8]; // rare appearance rate
 
-void MDString (char *inString, char *outString);
 int send_packet(login_client *client, int len);
 
 /* Send the welcome packet to the client when they connect to the login server.*/
@@ -62,6 +64,215 @@ int send_bb_login_welcome(login_client* client, uint8_t s_seed[48], uint8_t c_se
     return send_packet(client, BB_LOGIN_WELCOME_SZ);
 }
 
+/* Sends the packet that will display a large message box to the user. Intended
+* to be sent before disconnecting a client in the case of some errors. Note that
+* including a period at the end seems to cause a weird extra unknown character to
+* appear after the message so leave them off.
+*/
+bool send_bb_client_message(login_client* client, const char* message) {
+    bb_client_msg_pkt *pkt = (bb_client_msg_pkt*) (client->send_buffer + client->send_size);
+    memset(pkt, 0, sizeof(&pkt));
+    pkt->header.type = LE16(BB_CLIENT_MSG);
+    pkt->language_code = 0x00450009;
+
+    // The message itself is expected to be encoded as UTF-16 little endian, so it needs to be converted.
+    iconv_t conv = iconv_open("UTF-16LE", "UTF-8");
+    if (conv == (iconv_t)-1) {
+        perror("load_config:iconv_open");
+        exit(1);
+    }
+    int message_len = strlen(message);
+    char *inbuf = (char*) malloc(message_len), *inptr = inbuf;
+    strcpy(inbuf, message);
+
+    size_t inbytes = (size_t) message_len;
+    size_t outbytes = inbytes * 2, avail = outbytes;
+    char *outptr = pkt->message;
+    memset(pkt->message, 0, outbytes);
+    
+    if (iconv(conv, &inptr, &inbytes, &outptr, &avail) == (size_t)-1) {
+        perror("send_bb_client_message:iconv");
+        exit(1);
+    }
+    iconv_close(conv);
+    free(inbuf);
+    
+    // Pad the packet until its length is divisible by 8.
+    int pkt_len = 0x0C + (outbytes - avail);
+    while (pkt_len % 8) {
+        client->send_buffer[pkt_len++] = 0x00;
+    }
+
+    pkt->header.length = LE16(pkt_len);
+    client->send_size += pkt_len;
+
+    printf("Sending BB Client Message\n");
+    print_payload((u_char*)pkt, pkt_len);
+    printf("\n");
+    
+    CRYPT_CryptData(&client->server_cipher, pkt, pkt_len, 1);
+    int result = send_packet(client, pkt_len);
+    return result;
+}
+
+/* Sends security data to the client. Note that the guildcard must exist and
+ * the error must be one of the constants from packets.h (or otherwise in the
+ * range of 0x00-0x0B) or the packet will cause an error in the client.
+ */
+bool send_bb_security(login_client* client, uint32_t guildcard, uint32_t error) {
+    bb_security_pkt* pkt = (bb_security_pkt*) client->send_buffer + client->send_size;
+    memset(pkt, 0, BB_SECURITY_SZ);
+    pkt->header.type = LE16(BB_SECURITY_TYPE);
+    pkt->header.length = LE16(BB_SECURITY_SZ);
+
+    pkt->player_tag = 0x00010000;
+    pkt->guild_card = guildcard;
+    pkt->capabilities = 0x00000101; // Magic number - Tethealla always sets this.
+    pkt->error_code = error;
+
+    // Tethealla and newserv randomize this, so do the same.
+    static std::mt19937 rand_gen(time(NULL));
+    static std::uniform_int_distribution<uint32_t> dist(0, 255);
+    pkt->team_id = dist(rand_gen);
+
+    printf("Sending BB Security Info\n");
+    print_payload((unsigned char*)pkt, BB_SECURITY_SZ);
+    printf("\n");
+
+    client->send_size += BB_SECURITY_SZ;
+    
+    CRYPT_CryptData(&client->server_cipher, pkt, BB_SECURITY_SZ, 1);
+    return send_packet(client, BB_SECURITY_SZ);
+}
+
+/* Process a login packet from the client once they receive their welcome packet.
+ * We are only expecting packet 0x05 (disconnect) and 0x93 (login). Returns 0
+ * on success, -1 for MySQL error and 1 for account-related error (failure to
+ * log the player in).
+ */
+int handle_login(login_client* client) {
+	long long security_sixtyfour_check;
+	unsigned ch, connectNum, shipNum;
+    int fail_to_auth = 0;
+	ship_server* tship;
+	char security_sixtyfour_binary[18];
+    char query[1024] = {0};
+    MYSQL_ROW result_row;
+    MYSQL_RES* result;
+    unsigned char sha_password[34] = {0};
+    char hwinfo[18] = {0};
+    unsigned int guildcard;
+
+    bb_login_pkt *pkt = (bb_login_pkt*) client->recv_buffer;
+
+    mysql_real_escape_string(db_config.myData, (char*) hwinfo, (const char*) pkt->hardware_info, 8);
+    sprintf(query, "SELECT username, password, lasthwinfo, guildcard, isbanned, isactive "
+            "from account_data WHERE username ='%s'", pkt->username);
+
+    if (!mysql_query(db_config.myData, query)) {
+        if (!(result = mysql_store_result(db_config.myData))) {
+            // TODO: Indicate MySQL error
+            return -1;
+        } else {
+            // Does the account exist?
+            if (!(result_row = mysql_fetch_row(result))) {
+                send_bb_client_message(client, "Username or password is incorrect");
+                return -1;
+            }
+            sha256((unsigned char *)pkt->password, strlen(pkt->password), sha_password, 0);
+            guildcard = atoi(result_row[3]);
+
+            // Correct password?
+            if (!strcmp((const char*)sha_password, result_row[1])) {
+                // Banned?
+                if (strcmp(result_row[4], "TRUE")) {
+                    send_bb_client_message(client, "You are banned from this server");
+                    send_bb_security(client, guildcard, BB_LOGIN_ERROR_BANNED);
+                    return 2;
+                }
+                // Inactive?
+                else if (strcmp(result_row[5], "FALSE")) {
+                    send_bb_client_message(client, "Please complete the registration of this account "
+                                "through\ne-mail validation.\n\nThank you");
+                    send_bb_security(client, guildcard, BB_LOGIN_ERROR_UNREG);
+                    return 3;
+                }
+                // TODO: Check client version out of date?
+                // send_bb_client_message(client, "Your client executable is too old.\nPlease update your client through the patch server.");
+                // send_bb_security(client, guildcard, BB_LOGIN_ERROR_PATCH);
+            } else {
+                send_bb_client_message(client, "Username or password is incorrect");
+                return 1;
+            }
+        }
+    } else {
+        // TODO: Log a MySQL error
+        send_bb_client_message(client, "There is a problem with the MySQL database.\n\nPlease contact the server administrator");
+        return -1;
+    }
+
+    // Hardware info ban check.
+    memcpy (client->hardware_info, hwinfo, 18);
+    sprintf (query, "SELECT * from hw_bans WHERE hwinfo = '%s'", hwinfo );
+    if (!mysql_query(db_config.myData, query)) {
+        result = mysql_store_result(db_config.myData);
+        int banned = (int) mysql_num_rows(result);
+        mysql_free_result(result);
+        if (banned) {
+            send_bb_client_message(client, "You are banned from this server");
+            send_bb_security(client, guildcard, BB_LOGIN_ERROR_BANNED);
+            return 2;
+        }
+    }
+    else {
+        // TODO: Log MySQL error and bail
+        fail_to_auth = 1;
+    }
+
+    std::list<login_client*>::const_iterator c, c_end;
+    std::list<ship_server*>::const_iterator s, s_end;
+    time_t servertime = time(NULL);
+
+            // If guild card is connected to the login server already, disconnect it.
+            for (c = clients.begin(), c_end = clients.end(); c != c_end; ++c) {
+                if ((*c)->guildcard == guildcard) {
+                    send_bb_client_message(client, "This account is already logged on.\n\nPlease wait 120 seconds and try again");
+                    send_bb_security(client, guildcard, BB_LOGIN_ERROR_USERINUSE);
+                }
+            }
+
+            // If guild card is connected to ships, disconnect it.
+            for (s = ships.begin(), s_end = ships.end(); s != s_end; ++c)  {
+                if ((*s)->authenticated == 1) {
+                    //send_ship_disconnect_client(gcn, tship);
+                }
+            }
+
+            send_bb_security(client, guildcard, BB_LOGIN_ERROR_NONE);
+
+            /*
+             sprintf (&query[0], "DELETE from security_data WHERE guildcard = '%u'", gcn );
+             mysql_query ( db_config->myData, &query[0] );
+             mysql_real_escape_string ( db_config->myData, &security_sixtyfour_binary[0], (char*) &security_sixtyfour_check, 8);
+             sprintf (&query[0], "INSERT INTO security_data (guildcard, thirtytwo, sixtyfour, isgm) VALUES ('%u','0','%s', '%u')", gcn, (char*) &security_sixtyfour_binary, client->isgm );
+            if ( mysql_query ( db_config.myData, &query[0] ) )
+            {
+                send_bb_client_message(client,
+                                       "Couldn't update security information in MySQL database.\nPlease contact the server administrator.");
+                client->todc = 1;
+                return false;
+            }
+             */
+
+            /*
+            for (ch=0;ch<MAX_DRESS_FLAGS;ch++) {
+                if ((dress_flags[ch].guildcard == gcn) || ((unsigned) servertime - dress_flags[ch].flagtime > DRESS_FLAG_EXPIRY))
+                   dress_flags[ch].guildcard = 0;
+            }
+            */
+    return 0;
+}
+
 int character_process_packet(login_client* client) {
     return 0;
 }
@@ -80,8 +291,8 @@ int login_process_packet(login_client* client) {
             client->todc = true;
             result = 0;
             break;
-        case BB_LOGIN_LOGIN:
-            //result = handle_login(client);
+        case BB_LOGIN_TYPE:
+            result = handle_login(client);
             break;
         default:
             result = -1;
@@ -771,18 +982,4 @@ int main(int argc, const char * argv[]) {
     close(character_sockfd);
     close(ship_sockfd);
     mysql_close(db_config.myData);
-}
-
-void MDString (char *inString, char *outString) {
-    unsigned char c;
-    MD5_CTX mdContext;
-    unsigned int len = strlen (inString);
-
-    MD5Init (&mdContext);
-    MD5Update (&mdContext, (unsigned char*)inString, len);
-    MD5Final (&mdContext);
-    for (c=0;c<16;c++) {
-        *outString = mdContext.digest[c];
-        outString++;
-    }
 }

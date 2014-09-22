@@ -25,6 +25,21 @@
 
 const char BB_COPYRIGHT[] = "Phantasy Star Online Blue Burst Game Server. Copyright 1999-2004 SONICTEAM.";
 
+/* Error codes for packet E6 */
+
+#define BB_LOGIN_ERROR_NONE        0x00000000
+#define BB_LOGIN_ERROR_UNKNOWN     0x00000001
+#define BB_LOGIN_ERROR_UNREG       0x00000002
+#define BB_LOGIN_ERROR_UNREG2      0x00000003
+#define BB_LOGIN_ERROR_MAINT       0x00000004
+#define BB_LOGIN_ERROR_USERINUSE   0x00000005
+#define BB_LOGIN_ERROR_BANNED      0x00000006
+#define BB_LOGIN_ERROR_BANNED2     0x00000007
+#define BB_LOGIN_ERROR_UNREG3      0x00000008
+#define BB_LOGIN_ERROR_INVALID     0x00000009
+#define BB_LOGIN_ERROR_LOCKED      0x0000000A
+#define BB_LOGIN_ERROR_PATCH       0x0000000B
+
 /* Packet types and sizes. */
 
 #define BB_HEADER_LEN 8
@@ -32,7 +47,7 @@ const char BB_COPYRIGHT[] = "Phantasy Star Online Blue Burst Game Server. Copyri
 #define BB_LOGIN_WELCOME_TYPE 0x03
 #define BB_LOGIN_WELCOME_SZ 0xC8
 #define BB_LOGIN_SZ 0xB4
-#define BB_LOGIN_LOGIN 0x93
+#define BB_LOGIN_TYPE 0x93
 #define BB_SECURITY_TYPE 0xE6
 #define BB_SECURITY_SZ 0x44
 #define BB_CLIENT_MSG 0x1A
@@ -68,6 +83,25 @@ struct bb_login_pkt {
     uint8_t unused2[28];
     char hardware_info[8];
     char version_string[28];
+};
+
+/* Message to the client in the form of scrolling text at the
+ top of their screen. */
+struct bb_client_msg_pkt {
+    bb_packet_header header;
+    uint32_t language_code;
+    char message[];
+};
+
+/* Security data set by login and character servers. */
+struct bb_security_pkt {
+    bb_packet_header header;
+    uint32_t error_code;
+    uint32_t player_tag;
+    uint32_t guild_card;
+    uint32_t team_id;
+    uint8_t security64[40];
+    uint32_t capabilities;
 };
 
 //bool send_bb_login_welcome(login_client* client, uint8_t s_seed[48], uint8_t c_seed[48]);
