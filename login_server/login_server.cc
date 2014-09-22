@@ -823,7 +823,7 @@ int load_config() {
         char config_dir[128];
         sprintf(config_dir, "%s%s", LOCAL_DIR, CFG_NAME);
         
-        printf("ERROR.\nLoading config file in %s...", config_dir);
+        printf("MISSING.\nLoading config file in %s...", config_dir);
         cfg_file = json_load_file(config_dir, JSON_DECODE_ANY, &error);
         
         if (!cfg_file) {
@@ -833,7 +833,6 @@ int load_config() {
         }
     }
     char *global_color, *local_color, *normal_color;
-    char config_dir[1024];
     int result = json_unpack_ex(cfg_file, &error, JSON_STRICT,
             "{s:{s:s, s:s, s:s, s:i, s:s}, s:s, s:i, s:i, s:s, s:s, s:i, s:i, "
             "s:{s:i, s:i, s:i, s:i, s:i, s:i, s:i, s:i}, s:s, s:s, s:s}",
@@ -846,10 +845,10 @@ int load_config() {
             "server_ip", &server_config.server_ip,
             "login_port", &server_config.login_port,
             "ship_port", &server_config.ship_port,
-            "welcome_message", &server_config.welcome_message[0],
-            "config_dir", &config_dir,
-            "max_clients", &server_config.serverMaxConnections,
-            "max_ships" , &server_config.serverMaxShips,
+            "welcome_message", &server_config.welcome_message,
+            "config_dir", &server_config.config_dir,
+            "max_client_connections", &server_config.serverMaxConnections,
+            "max_ship_connections" , &server_config.serverMaxShips,
             "rare_appearance_rates",
             "hildebear", &mob_rate[0],
             "rappy", &mob_rate[1],
@@ -873,9 +872,6 @@ int load_config() {
     localName = atoi(global_color);
     normalName = atoi(normal_color);
     
-    server_config.config_dir = (char*) malloc(strlen(config_dir) + 1);
-    strcpy(server_config.config_dir, config_dir);
-    
     return 0;
 }
 
@@ -894,11 +890,11 @@ int main(int argc, const char * argv[]) {
     print_programinfo();
     
     printf("Loading configuration file %s...", CFG_NAME);
-    load_config();
+    if (load_config())
+        exit(1);
     printf("OK\n");
-    
-    char start_dir[512];
-    getcwd(start_dir, 512);
+
+    // Change the local directory for ease of loading files/folders.
     chdir(server_config.config_dir);
     
     // TODO: Load player starting stats
@@ -906,9 +902,7 @@ int main(int argc, const char * argv[]) {
     // TODO: Packet E7 config?
     // TODO: Packet EB
     // TODO: Quest item allowances
-    
-    chdir(start_dir);
-    
+
 #ifdef DEBUG_OUTPUT
 	printf ("\n---MySQL connection parameters---\n");
 	printf ("Host: %s\n", db_config.host );

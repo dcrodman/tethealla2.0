@@ -24,7 +24,7 @@ struct login_config {
     unsigned quest_numallows;
     unsigned* quest_allow;
     unsigned max_ship_keys = 0;
-    char welcome_message[255];
+    char *welcome_message;
 };
 
 struct mysql_config {
@@ -37,8 +37,11 @@ struct mysql_config {
 };
 
 enum server_session {
-    LOGIN,
-    CHARACTER
+    LOGIN, CHARACTER
+};
+
+enum log_type {
+    ERROR, WARNING, INFO
 };
 
 struct login_client {
