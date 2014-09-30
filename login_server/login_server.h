@@ -13,8 +13,10 @@ extern "C" {
 struct login_config {
     unsigned char serverIPN[4]; // network-presentation of the IP
     char* server_ip;
-    unsigned short login_port;
-    unsigned short ship_port;
+    uint32_t server_ip_netp;
+    uint16_t login_port;
+    uint16_t character_port;
+    uint16_t ship_port;
     char *config_dir;
     
     unsigned short serverMaxConnections;

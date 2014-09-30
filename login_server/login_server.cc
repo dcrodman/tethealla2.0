@@ -918,7 +918,8 @@ int load_config() {
         return -1;
     }
     
-    inet_pton(AF_INET, server_config.server_ip, server_config.serverIPN);
+    server_config.server_ip_netp = inet_addr(server_config.server_ip);
+    server_config.character_port = server_config.login_port + 1;
     globalName = atoi(global_color);
     localName = atoi(global_color);
     normalName = atoi(normal_color);
@@ -981,7 +982,7 @@ int main(int argc, const char * argv[]) {
     printf ("\n---Login server parameters---\n");
 	printf ("IP: %s\n",  server_config.server_ip);
 	printf ("Login Port: %u\n", server_config.login_port );
-	printf ("Character Port: %u\n", server_config.login_port+1 );
+	printf ("Character Port: %u\n", server_config.character_port );
 	printf ("Maximum Connections: %u\n", server_config.serverMaxConnections );
 	printf ("Maximum Ships: %u\n\n", server_config.serverMaxShips );
     
@@ -995,12 +996,12 @@ int main(int argc, const char * argv[]) {
     hints.ai_protocol = IPPROTO_TCP;
     
     sprintf(port, "%d", server_config.login_port);
-    printf ("Opening server login port %s for connections...", port);
+    printf ("Opening login port %s for connections...", port);
 	login_sockfd = create_socket(port, &hints);
     printf("OK\n");
     
-    sprintf(port, "%d", server_config.login_port + 1);
-    printf ("Opening server character port %s for connections...", port);
+    sprintf(port, "%d", server_config.character_port);
+    printf ("Opening character port %s for connections...", port);
     character_sockfd = create_socket(port, &hints);
     printf("OK\n");
     
