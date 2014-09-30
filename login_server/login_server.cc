@@ -196,55 +196,121 @@ bool send_bb_security(login_client* client, uint32_t guildcard, uint32_t error) 
     return send_packet(client, BB_SECURITY_SZ);
 }
 
+/* Sends the redirect packet from the login server to indicate the IP
+ * and port number of the character server.
+ */
+bool send_bb_redirect(login_client* client, uint32_t ip, uint16_t port) {
+    bb_redirect_pkt *pkt = (bb_redirect_pkt*) client->send_buffer + client->send_size;
+    memset(pkt, 0, BB_REDIRECT_SZ);
+    pkt->header.type = LE16(BB_REDIRECT_TYPE);
+    pkt->header.length = LE16(BB_REDIRECT_SZ);
+
+    pkt->ip_addr = ip;
+    pkt->port = LE16(port);
+    client->send_size += BB_REDIRECT_SZ;
+
+    printf("Sending BB Redirect\n");
+    print_payload((u_char*) pkt, BB_REDIRECT_SZ);
+    printf("\n");
+
+    CRYPT_CryptData(&client->server_cipher, pkt, BB_REDIRECT_SZ, 1);
+    return send_packet(client, BB_REDIRECT_SZ);
+}
+
+/* Packet sent between ships to tell the other ships that this user logged on and
+ * to disconnect him/her if they're still active.
+ */
+bool send_ship_disconnect_client (unsigned gcn, ship_server* ship) {
+    /*
+	ship->encryptbuf[0x00] = 0x08;
+	ship->encryptbuf[0x01] = 0x00;
+	*(unsigned *) &ship->encryptbuf[0x02] = gcn;
+	compressShipPacket ( ship, &ship->encryptbuf[0x00], 0x06 );
+    */
+
+    // TODO: Send this to all connected ships.
+    assert(false);
+}
+
+/* Computes the SHA256 hash of the password and stores it in buffer, which must
+ * have a length of at least 64. The output format is a hex string instead of raw bytes.
+ * There's probably a better way to do this, but I couldn't find one and just came up
+ * with a quick and dirty method.
+ */
+void sha_password(char *buffer, const char* password) {
+    u_char sha_password[32];
+    sha256((u_char*) password, strlen(password), sha_password, 0);
+    // Expand the characters from two per byte to one per byte in order to properly
+    // extract all 64.
+    for (int i = 0, j = 0; i < 32; i++, j += 2) {
+        sprintf(&buffer[j], "%1x", (sha_password[i] & 0xF0) >> 4);
+        sprintf(&buffer[j + 1], "%1x", sha_password[i] & 0x0F);
+    }
+}
+
 /* Process a login packet from the client once they receive their welcome packet.
  * We are only expecting packet 0x05 (disconnect) and 0x93 (login). Returns 0
  * on success, -1 for MySQL error and 1 for account-related error (failure to
  * log the player in).
  */
 int handle_login(login_client* client) {
-	long long security_sixtyfour_check;
-	unsigned ch, connectNum, shipNum;
-    int fail_to_auth = 0;
-	ship_server* tship;
-	char security_sixtyfour_binary[18];
     char query[1024] = {0};
     MYSQL_ROW result_row;
     MYSQL_RES* result;
-    unsigned char sha_password[34] = {0};
     char hwinfo[18] = {0};
     unsigned int guildcard;
+    char password_hash[64];
 
     bb_login_pkt *pkt = (bb_login_pkt*) client->recv_buffer;
 
     mysql_real_escape_string(db_config.myData, (char*) hwinfo, (const char*) pkt->hardware_info, 8);
-    sprintf(query, "SELECT username, password, lasthwinfo, guildcard, isbanned, isactive "
+    sprintf(query, "SELECT username, password, lasthwinfo, guildcard, isbanned, isactive, isgm "
             "from account_data WHERE username ='%s'", pkt->username);
 
+#ifdef DEV_MODE
+    retry:
+#endif
     if (!mysql_query(db_config.myData, query)) {
         if (!(result = mysql_store_result(db_config.myData))) {
-            // TODO: Indicate MySQL error
+            log_mysql(ERROR, strerror(errno));
             return -1;
         } else {
             // Does the account exist?
             if (!(result_row = mysql_fetch_row(result))) {
-                send_bb_client_message(client, "Username or password is incorrect");
-                return -1;
+#ifdef DEV_MODE
+                // Just create the account if one doesn't exist already.
+                sha_password(password_hash, pkt->password);
+
+                char querystr[1024];
+                sprintf(querystr, "insert into account_data (username, password, guildcard, isgm, "
+                        "isbanned, isactive) values ('rabble', '%s', 'test@b.c', 1, TRUE, TRUE, FALSE);",
+                        password_hash);
+                if((mysql_query(db_config.myData, querystr))) {
+                    send_bb_client_message(client, "Username or password is incorrect.\n"
+                                           "(Dev Mode: failed to create account) ");
+                    return 1;
+                }
+                goto retry;
+#else
+                send_bb_client_message(client, "Username or password is incorrect. ");
+                return 1;
+#endif
             }
-            sha256((unsigned char *)pkt->password, strlen(pkt->password), sha_password, 0);
+            sha_password(password_hash, pkt->password);
             guildcard = atoi(result_row[3]);
 
             // Correct password?
-            if (!strcmp((const char*)sha_password, result_row[1])) {
+            if (!strcmp(password_hash, result_row[1])) {
                 // Banned?
-                if (strcmp(result_row[4], "TRUE")) {
-                    send_bb_client_message(client, "You are banned from this server");
+                if (strcmp(result_row[4], "0")) {
+                    send_bb_client_message(client, "You are banned from this server. ");
                     send_bb_security(client, guildcard, BB_LOGIN_ERROR_BANNED);
                     return 2;
                 }
                 // Inactive?
-                else if (strcmp(result_row[5], "FALSE")) {
+                else if (strcmp(result_row[5], "0")) {
                     send_bb_client_message(client, "Please complete the registration of this account "
-                                "through\ne-mail validation.\n\nThank you");
+                                "through\ne-mail validation.\n\nThank you. ");
                     send_bb_security(client, guildcard, BB_LOGIN_ERROR_UNREG);
                     return 3;
                 }
@@ -252,15 +318,23 @@ int handle_login(login_client* client) {
                 // send_bb_client_message(client, "Your client executable is too old.\nPlease update your client through the patch server.");
                 // send_bb_security(client, guildcard, BB_LOGIN_ERROR_PATCH);
             } else {
-                send_bb_client_message(client, "Username or password is incorrect");
+                send_bb_client_message(client, "Username or password is incorrect. ");
                 return 1;
             }
         }
     } else {
-        // TODO: Log a MySQL error
+        log_mysql(ERROR, strerror(errno));
         send_bb_client_message(client, "There is a problem with the MySQL database.\n\nPlease contact the server administrator");
         return -1;
     }
+
+    if (strcmp(PSO_CLIENT_VER_STRING, pkt->version_string)) {
+        send_bb_client_message(client, "Your client executable is too old, please update through the patch server. ");
+        send_bb_security(client, guildcard, BB_LOGIN_ERROR_PATCH);
+        return 5;
+    }
+
+    int isgm = strcmp(result_row[6], "1") ? 0 : 1;
 
     // Hardware info ban check.
     memcpy (client->hardware_info, hwinfo, 18);
@@ -276,51 +350,55 @@ int handle_login(login_client* client) {
         }
     }
     else {
-        // TODO: Log MySQL error and bail
-        fail_to_auth = 1;
+        log_mysql(ERROR, strerror(errno));
+        send_bb_client_message(client, "There is a problem with the MySQL database.\n\nPlease contact the server administrator");
+        return -1;
     }
 
     std::list<login_client*>::const_iterator c, c_end;
     std::list<ship_server*>::const_iterator s, s_end;
-    time_t servertime = time(NULL);
 
-            // If guild card is connected to the login server already, disconnect it.
-            for (c = clients.begin(), c_end = clients.end(); c != c_end; ++c) {
-                if ((*c)->guildcard == guildcard) {
-                    send_bb_client_message(client, "This account is already logged on.\n\nPlease wait 120 seconds and try again");
-                    send_bb_security(client, guildcard, BB_LOGIN_ERROR_USERINUSE);
-                }
-            }
+    // If guild card is connected to the login server already, disconnect it.
+    for (c = clients.begin(), c_end = clients.end(); c != c_end; ++c) {
+        if ((*c)->guildcard == guildcard) {
+            send_bb_client_message(client, "This account is already logged on.\n\nPlease wait 120 seconds and try again");
+            send_bb_security(client, guildcard, BB_LOGIN_ERROR_USERINUSE);
+            return 4;
+        }
+    }
 
-            // If guild card is connected to ships, disconnect it.
-            for (s = ships.begin(), s_end = ships.end(); s != s_end; ++c)  {
-                if ((*s)->authenticated == 1) {
-                    //send_ship_disconnect_client(gcn, tship);
-                }
-            }
+    // If guild card is connected to ships, disconnect it.
+    for (s = ships.begin(), s_end = ships.end(); s != s_end; ++c)  {
+        if ((*s)->authenticated == 1) {
+            //send_ship_disconnect_client(gcn, tship);
+            return 4;
+        }
+    }
 
-            send_bb_security(client, guildcard, BB_LOGIN_ERROR_NONE);
+    // TODO: Figure out what this is for
+    long long security_sixtyfour_check;
+    char security_sixtyfour_binary[18];
+    sprintf (query, "DELETE from security_data WHERE guildcard = '%u'", guildcard);
+    mysql_query(db_config.myData, query);
+    mysql_real_escape_string(db_config.myData, &security_sixtyfour_binary[0], (char*) &security_sixtyfour_check, 8);
+    sprintf (query, "INSERT INTO security_data (guildcard, thirtytwo, sixtyfour, isgm) VALUES ('%u','0','%s', '%u')", guildcard,
+              (char*) &security_sixtyfour_binary, isgm);
+    if ( mysql_query ( db_config.myData, &query[0] ) )
+    {
+        send_bb_client_message(client, "Couldn't update security information in MySQL database.\n"
+                               "Please contact the server administrator.");
+        return -1;
+    }
 
-            /*
-             sprintf (&query[0], "DELETE from security_data WHERE guildcard = '%u'", gcn );
-             mysql_query ( db_config->myData, &query[0] );
-             mysql_real_escape_string ( db_config->myData, &security_sixtyfour_binary[0], (char*) &security_sixtyfour_check, 8);
-             sprintf (&query[0], "INSERT INTO security_data (guildcard, thirtytwo, sixtyfour, isgm) VALUES ('%u','0','%s', '%u')", gcn, (char*) &security_sixtyfour_binary, client->isgm );
-            if ( mysql_query ( db_config.myData, &query[0] ) )
-            {
-                send_bb_client_message(client,
-                                       "Couldn't update security information in MySQL database.\nPlease contact the server administrator.");
-                client->todc = 1;
-                return false;
-            }
-             */
+    /*
+     TODO: Enable this?
+    for (ch=0;ch<MAX_DRESS_FLAGS;ch++) {
+        if ((dress_flags[ch].guildcard == gcn) || ((unsigned) servertime - dress_flags[ch].flagtime > DRESS_FLAG_EXPIRY))
+           dress_flags[ch].guildcard = 0;
+    }
+    */
 
-            /*
-            for (ch=0;ch<MAX_DRESS_FLAGS;ch++) {
-                if ((dress_flags[ch].guildcard == gcn) || ((unsigned) servertime - dress_flags[ch].flagtime > DRESS_FLAG_EXPIRY))
-                   dress_flags[ch].guildcard = 0;
-            }
-            */
+    send_bb_redirect(client, server_config.server_ip_netp, server_config.character_port);
     return 0;
 }
 
@@ -339,7 +417,6 @@ int login_process_packet(login_client* client) {
     int result = 0;
     switch (header->type) {
         case BB_LOGIN_DISCONNECT:
-            client->todc = true;
             result = 0;
             break;
         case BB_LOGIN_TYPE:
@@ -349,6 +426,9 @@ int login_process_packet(login_client* client) {
             result = -1;
             break;
     }
+    // The client only sends d/c and login packets to this server, both of which
+    // result in a disconnect and any unknowns will be a d/c as well.
+    client->todc = true;
     return result;
 }
 

@@ -80,9 +80,9 @@ struct bb_login_pkt {
     char username[16];
     uint8_t unused[32];
     char password[16];
-    uint8_t unused2[28];
+    uint8_t unused2[40];
     char hardware_info[8];
-    char version_string[28];
+    char version_string[40];
 };
 
 /* Message to the client in the form of scrolling text at the
@@ -102,6 +102,14 @@ struct bb_security_pkt {
     uint32_t team_id;
     uint8_t security64[40];
     uint32_t capabilities;
+};
+
+/* Sent to the client to indicate the IP and port of the character server. */
+struct bb_redirect_pkt {
+    bb_packet_header header;
+    uint32_t ip_addr;
+    uint16_t port;
+    uint16_t padding;
 };
 
 //bool send_bb_login_welcome(login_client* client, uint8_t s_seed[48], uint8_t c_seed[48]);
