@@ -1,10 +1,14 @@
 #include <iostream>
+#include <fstream>
 #include <list>
 #include <random>
+
+#include <cassert>
 #include <cstdlib>
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <netdb.h>
 #include <unistd.h>
 
@@ -21,11 +25,14 @@ extern "C" {
 }
 
 #define DEBUG_OUTPUT
+#define DEV_MODE
 #define MAX_SIMULTANEOUS_CONNECTIONS 1
 
 const int BACKLOG = 10;
 const char *CFG_NAME = "login_config.json";
 const char *LOCAL_DIR = "/usr/local/share/tethealla/config/";
+
+const char *PSO_CLIENT_VER_STRING = "TethVer12510";
 
 uint32_t normalName = 0xFFFFFFFF;
 uint32_t globalName = 0xFF1D94F7;
@@ -43,6 +50,50 @@ std::uniform_int_distribution<uint8_t> dist(0, 255);
 unsigned mob_rate[8]; // rare appearance rate
 
 int send_packet(login_client *client, int len);
+
+void timestamp(char *buffer, int len) {
+    time_t rawtime;
+    time(&rawtime);
+    struct tm *tminfo = localtime(&rawtime);
+    strftime(buffer, len, "%F %r", tminfo);
+}
+
+/* Write an entry to the specified log file. If the directory does not exist, it
+ * will be created and the necessary files created. All in all not the cheapest
+ * operation, but important if we're seeing MySQL errors.
+ */
+void log_mysql(log_type severity, const char *message) {
+    static bool dir_exists = false;
+    if (!dir_exists) {
+        if (mkdir("log", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)) {
+            if (errno != EEXIST) {
+                printf("\n!!!WARNING!!!: Unable to create log directory.\n");
+                perror("mkdir");
+                return;
+            }
+        }
+        dir_exists = true;
+    }
+
+    std::fstream mysql_log("log/mysql.log", std::ios::app);
+    if (mysql_log.is_open()) {
+        char timebuf[50];
+        timestamp(timebuf, 50);
+
+        log_type severity = ERROR;
+        mysql_log << timebuf;
+        if (severity == ERROR)
+            mysql_log << " (ERROR) ";
+        else if (severity == WARNING)
+            mysql_log << " (WARNING) ";
+        else
+            mysql_log << " (INFO) ";
+        mysql_log << "MySQL: Testing" << "\n";
+        mysql_log.close();
+    } else {
+        printf("\n!!!WARNING!!!: Unable to create or open mysql.log.\n");
+    }
+}
 
 /* Send the welcome packet to the client when they connect to the login server.*/
 int send_bb_login_welcome(login_client* client, uint8_t s_seed[48], uint8_t c_seed[48]) {
@@ -66,8 +117,8 @@ int send_bb_login_welcome(login_client* client, uint8_t s_seed[48], uint8_t c_se
 
 /* Sends the packet that will display a large message box to the user. Intended
 * to be sent before disconnecting a client in the case of some errors. Note that
-* including a period at the end seems to cause a weird extra unknown character to
-* appear after the message so leave them off.
+* adding a period as the last character seems to make the client render some
+* strange character, so either leave it off or include a space after it.
 */
 bool send_bb_client_message(login_client* client, const char* message) {
     bb_client_msg_pkt *pkt = (bb_client_msg_pkt*) (client->send_buffer + client->send_size);
