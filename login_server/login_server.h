@@ -53,7 +53,10 @@ struct login_client {
     int port;
     
     uint32_t guildcard;
+    uint32_t team_id;
+    bool is_gm;
     char hardware_info[18];
+    
     CRYPT_SETUP client_cipher, server_cipher;
     
     unsigned char send_buffer[TCP_BUFFER_SIZE];

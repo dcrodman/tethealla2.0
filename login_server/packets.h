@@ -30,7 +30,7 @@ const char BB_COPYRIGHT[] = "Phantasy Star Online Blue Burst Game Server. Copyri
 #define BB_LOGIN_ERROR_NONE        0x00000000
 #define BB_LOGIN_ERROR_UNKNOWN     0x00000001
 #define BB_LOGIN_ERROR_UNREG       0x00000002
-#define BB_LOGIN_ERROR_UNREG2      0x00000003
+#define BB_LOGIN_ERROR_UNREG2       0x00000003
 #define BB_LOGIN_ERROR_MAINT       0x00000004
 #define BB_LOGIN_ERROR_USERINUSE   0x00000005
 #define BB_LOGIN_ERROR_BANNED      0x00000006
@@ -70,7 +70,7 @@ struct bb_login_welcome_pkt {
     uint8_t client_vector[48];
 };
 
-/* Login packet send to login and ship servers. */
+/* Login packet sent from the client. */
 struct bb_login_pkt {
     bb_packet_header header;
     uint8_t unknown[8];
@@ -85,8 +85,7 @@ struct bb_login_pkt {
     char version_string[40];
 };
 
-/* Message to the client in the form of scrolling text at the
- top of their screen. */
+/* Message to the client in the form of scrolling text at the top of their screen. */
 struct bb_client_msg_pkt {
     bb_packet_header header;
     uint32_t language_code;
@@ -100,7 +99,7 @@ struct bb_security_pkt {
     uint32_t player_tag;
     uint32_t guild_card;
     uint32_t team_id;
-    uint8_t security64[40];
+    uint8_t security_data[40];
     uint32_t capabilities;
 };
 
@@ -111,7 +110,5 @@ struct bb_redirect_pkt {
     uint16_t port;
     uint16_t padding;
 };
-
-//bool send_bb_login_welcome(login_client* client, uint8_t s_seed[48], uint8_t c_seed[48]);
 
 #endif
