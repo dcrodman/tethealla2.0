@@ -30,7 +30,7 @@ const char BB_COPYRIGHT[] = "Phantasy Star Online Blue Burst Game Server. Copyri
 #define BB_LOGIN_ERROR_NONE        0x00000000
 #define BB_LOGIN_ERROR_UNKNOWN     0x00000001
 #define BB_LOGIN_ERROR_UNREG       0x00000002
-#define BB_LOGIN_ERROR_UNREG2       0x00000003
+#define BB_LOGIN_ERROR_UNREG2      0x00000003
 #define BB_LOGIN_ERROR_MAINT       0x00000004
 #define BB_LOGIN_ERROR_USERINUSE   0x00000005
 #define BB_LOGIN_ERROR_BANNED      0x00000006
@@ -92,6 +92,17 @@ struct bb_client_msg_pkt {
     char message[];
 };
 
+/* Client config packet as defined by newserv. */
+struct bb_clientconfig {
+    uint32_t magic; // must be set to 0x48615467
+    uint8_t bbGameState; // status of client connecting on BB
+    uint8_t bbplayernum; // selected char
+    uint16_t flags; // just in case we lose them somehow between connections
+    uint16_t ports[4]; // used by shipgate clients
+    uint32_t unused[4];
+    uint32_t unusedBBOnly[2];
+};
+
 /* Security data set by login and character servers. */
 struct bb_security_pkt {
     bb_packet_header header;
@@ -99,7 +110,7 @@ struct bb_security_pkt {
     uint32_t player_tag;
     uint32_t guild_card;
     uint32_t team_id;
-    uint8_t security_data[40];
+    bb_clientconfig clientconfig;
     uint32_t capabilities;
 };
 
