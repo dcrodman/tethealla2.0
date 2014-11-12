@@ -416,6 +416,38 @@ int character_process_packet(login_client* client) {
                 // send EE
             }
             break;
+        case 0x10:
+            // TODO
+            break;
+        case 0x1D:
+            // Tethealla does nothing?
+            break;
+        case 0xDC:
+            // TODO
+            break;
+        case 0xE0:
+            // TODO: Send E2
+            break;
+        case 0xE3:
+            // TODO
+            break;
+        case 0xE5:
+            // TODO: Create a character in a lot.
+            break;
+        case 0xE8:
+            // TODO
+            break;
+        case 0xEB:
+            // TODO
+            break;
+        case 0xEC:
+            // TODO
+            break;
+        default:
+            // TODO: Log IP and unknown packet.
+            printf("Received unknown packet of type 0x%02x from %s\n", header->type, client->IP_address);
+            result = -1;
+            break;
     }
     if (result) {
         client->todc = true;
@@ -512,14 +544,17 @@ int receive_from_client(login_client *client) {
     bytes = recv(client->socket, client->recv_buffer + client->recv_size, client->packet_sz - client->recv_size, 0);
     client->recv_size += bytes;
     
-    if (bytes == -1)
+    if (bytes == -1) {
         perror("recv");
-    if (bytes <= 0)
+    }
+    if (bytes <= 0) {
         return (bytes == -1) ? -1 : 1;
+    }
     
-    if (client->recv_size < client->packet_sz)
+    if (client->recv_size < client->packet_sz) {
         // Wait until we get the rest of the packet.
         return 0;
+    }
     
     // By now we've received the whole packet.
     CRYPT_CryptData(&client->client_cipher, client->recv_buffer + BB_HEADER_LEN, client->packet_sz - BB_HEADER_LEN, 0);
@@ -533,10 +568,11 @@ handle:
 #endif
     
     int result = 0;
-    if (client->session == LOGIN)
+    if (client->session == LOGIN) {
         result = login_process_packet(client);
-    else
+    } else {
         result = character_process_packet(client);
+    }
     
     // Move the packet out of the recv buffer and reduce the currently received size.
     client->recv_size -= client->packet_sz;
