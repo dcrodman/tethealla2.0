@@ -30,7 +30,7 @@
 #include <stdlib.h>
 
 long calculate_checksum(void* data, unsigned long size);
-const char* utf8ToUtf16LE(char *from);
+int utf8ToUtf16LE(char *from, char *to);
 unsigned RleEncode(unsigned char *src, unsigned char *dest, unsigned src_size);
 void RleDecode(unsigned char *src, unsigned char *dest, unsigned src_size);
 

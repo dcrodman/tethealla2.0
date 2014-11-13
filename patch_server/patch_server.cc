@@ -639,6 +639,7 @@ int load_config() {
     }
 
     // Unpack the JSON config file into the corresponding server config entries.
+    char *welcome_message;
     int result = json_unpack_ex(cfg_file, &error, JSON_STRICT,
             "{s:s, s:s, s:s, s:s, s?b, s:s}",
             "patch_ip", &(server_config->serverIPStr),
@@ -646,7 +647,7 @@ int load_config() {
             "data_port", &(server_config->data_port),
             "patch_dir", &(server_config->patch_directory),
             "enable_ipv6", &(server_config->enable_ipv6),
-            "welcome_message", &(server_config->welcome_message));
+            "welcome_message", &(welcome_message));
     if (result == -1) {
         json_error(&error);
         return -1;
@@ -656,8 +657,7 @@ int load_config() {
 
     // The Welcome Message sent in PATCH_WELCOME_MESSAGE is expected to be encoded
     // as UTF-16 little endian, so it needs to be converted.
-    server_config->welcome_message = utf8ToUtf16LE(server_config->welcome_message);
-    server_config->welcome_size = outbytes;
+    server_config->welcome_size = utf8ToUtf16LE(welcome_message, server_config->welcome_message);;
 
     printf("Done!\n\n");
     return 0;

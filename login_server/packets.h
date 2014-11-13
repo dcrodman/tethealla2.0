@@ -89,7 +89,7 @@ struct bb_login_pkt {
 struct bb_client_msg_pkt {
     bb_packet_header header;
     uint32_t language_code;
-    char message[];
+    char *message;
 };
 
 /* Client config packet as defined by newserv. */

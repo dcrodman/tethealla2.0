@@ -21,6 +21,7 @@ extern "C" {
     #include <polarssl/sha256.h>
     #include <jansson.h>
     #include "sniffex.h"
+    #include "utils.h"
 }
 
 #define DEBUG_OUTPUT
@@ -124,43 +125,24 @@ bool send_bb_client_message(login_client* client, const char* message) {
     pkt.header.type = LE16(BB_CLIENT_MSG);
     pkt.language_code = 0x00450009;
 
-    // The message itself is expected to be encoded as UTF-16 little endian, so it needs to be converted.
-    iconv_t conv = iconv_open("UTF-16LE", "UTF-8");
-    if (conv == (iconv_t)-1) {
-        perror("load_config:iconv_open");
-        exit(1);
-    }
-    int message_len = strlen(message);
-    char *inbuf = (char*) malloc(message_len), *inptr = inbuf;
-    strcpy(inbuf, message);
-
-    size_t inbytes = (size_t) message_len;
-    size_t outbytes = inbytes * 2, avail = outbytes;
-    char *outptr = pkt.message;
-    memset(pkt.message, 0, outbytes);
-    
-    if (iconv(conv, &inptr, &inbytes, &outptr, &avail) == (size_t)-1) {
-        perror("send_bb_client_message:iconv");
-        exit(1);
-    }
-    iconv_close(conv);
-    free(inbuf);
+    int message_size = utf8ToUtf16LE((char*)message, pkt.message);
     
     // Pad the packet until its length is divisible by 8.
-    int pkt_len = 0x0C + (outbytes - avail);
+    int pkt_len = 0x0C + message_size;
     while (pkt_len % 8) {
         client->send_buffer[pkt_len++] = 0x00;
     }
 
     pkt.header.length = LE16(pkt_len);
-    client->send_size += pkt_len;
 
     printf("Sending BB Client Message\n");
     print_payload((u_char*)&pkt, pkt_len);
     printf("\n");
     
     CRYPT_CryptData(&client->server_cipher, &pkt, pkt_len, 1);
-    return send_packet(client, &pkt, pkt_len);
+    int result = send_packet(client, &pkt, pkt_len);
+    free(pkt.message);
+    return result;
 }
 
 /* Sends security data to the client. Note that the client's guildcard and team_id must be set
@@ -301,13 +283,6 @@ int verify_account(login_client *client, bb_login_pkt *pkt) {
         send_bb_security(client, BB_LOGIN_ERROR_UNREG);
         return 3;
     }
-    // Client version up to date?
-    if ((strcmp(pkt->version_string, PSO_CLIENT_VER_STRING) != 0) || pkt->client_version != PSO_CLIENT_VER) {
-        mysql_free_result(result);
-        send_bb_client_message(client, "Your client executable is too old.\nPlease update your client through the patch server.");
-        send_bb_security(client, BB_LOGIN_ERROR_PATCH);
-        return 5;
-    }
     
     mysql_free_result(result);
     
@@ -390,8 +365,53 @@ int handle_login(login_client* client) {
            dress_flags[ch].guildcard = 0;
     }
     */
+
+    return send_bb_security(client, BB_LOGIN_ERROR_NONE);
+}
+
+int handle_login_character(login_client *client) {
+    bb_login_pkt *pkt = (bb_login_pkt*) client->recv_buffer;
+    
+    int status = verify_account(client, pkt);
+    if (status) {
+        if (status == -1) {
+            // MySQL error encountered; log an error and bail since there's not really a way to recover.
+            log_mysql(ERROR, strerror(errno));
+            send_bb_client_message(client, "There is a problem with the database.\n\nPlease contact the server administrator. ");
+            send_bb_security(client, BB_LOGIN_ERROR_UNKNOWN);
+            return -1;
+        }
+        return status;
+    }
     
     return send_bb_security(client, BB_LOGIN_ERROR_NONE);
+}
+
+/* Process a client packet sent to the LOGIN server. Returns 0 on success, 1
+ * on error and -1 if the handler received an unrecognized packet type.
+ */
+int login_process_packet(login_client* client) {
+    bb_packet_header* header = (bb_packet_header*) client->recv_buffer;
+    header->type = LE16(header->type);
+    header->length = LE16(header->length);
+
+    int result = 0;
+    switch (header->type) {
+        case BB_LOGIN_DISCONNECT:
+            client->todc = true;
+            break;
+        case BB_LOGIN_TYPE:
+            result = handle_login(client);
+            if (!result) {
+                result = send_bb_redirect(client, server_config.server_ip_netp, server_config.character_port);
+            }
+            break;
+        default:
+            // TODO: Log an unknown packet with IP
+            result = -1;
+            break;
+    }
+    return result;
 }
 
 /* Process a client packet sent to the CHARACTER server. Returns 0 on success,
@@ -408,8 +428,8 @@ int character_process_packet(login_client* client) {
         case BB_LOGIN_DISCONNECT:
             result = 1;
             break;
-        case BB_LOGIN_WELCOME_TYPE:
-            result = handle_login(client);
+        case BB_LOGIN_TYPE:
+            result = handle_login_character(client);
             if (!result) {
                 // send B1
                 // send A0
@@ -451,33 +471,6 @@ int character_process_packet(login_client* client) {
     }
     if (result) {
         client->todc = true;
-    }
-    return result;
-}
-
-/* Process a client packet sent to the LOGIN server. Returns 0 on success, 1
- * on error and -1 if the handler received an unrecognized packet type.
- */
-int login_process_packet(login_client* client) {
-    bb_packet_header* header = (bb_packet_header*) client->recv_buffer;
-    header->type = LE16(header->type);
-    header->length = LE16(header->length);
-    
-    int result = 0;
-    switch (header->type) {
-        case BB_LOGIN_DISCONNECT:
-            client->todc = true;
-            break;
-        case BB_LOGIN_TYPE:
-            result = handle_login(client);
-            if (!result) {
-                result = send_bb_redirect(client, server_config.server_ip_netp, server_config.character_port);
-            }
-            break;
-        default:
-            // TODO: Log an unknown packet with IP
-            result = -1;
-            break;
     }
     return result;
 }
