@@ -656,25 +656,7 @@ int load_config() {
 
     // The Welcome Message sent in PATCH_WELCOME_MESSAGE is expected to be encoded
     // as UTF-16 little endian, so it needs to be converted.
-    iconv_t conv = iconv_open("UTF-16LE", "UTF-8");
-    if (conv == (iconv_t)-1) {
-        perror("load_config:iconv_open");
-        exit(1);
-    }
-
-    char *inbuf = server_config->welcome_message;
-    size_t inbytes = (size_t) strlen(server_config->welcome_message);
-    size_t outbytes = inbytes * 2, avail = outbytes;
-    char *outbuf = (char*) malloc(outbytes), *outptr = outbuf;
-    memset(outbuf, 0, outbytes);
-
-    if (iconv(conv, &inbuf, &inbytes, &outptr, &avail) == (size_t)-1) {
-        perror("load_config:iconv");
-        exit(1);
-    }
-    iconv_close(conv);
-
-    server_config->welcome_message = outbuf;
+    server_config->welcome_message = utf8ToUtf16LE(server_config->welcome_message);
     server_config->welcome_size = outbytes;
 
     printf("Done!\n\n");

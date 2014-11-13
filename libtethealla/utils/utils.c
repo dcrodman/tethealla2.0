@@ -24,7 +24,12 @@
 
  */
 
-#include <utils.h>
+#include <stdio.h>
+#include <string.h>
+#include <iconv.h>
+
+#include "utils.h"
+
 
 long calculate_checksum(void* data, unsigned long size)
 {
@@ -39,6 +44,30 @@ long calculate_checksum(void* data, unsigned long size)
         }
     }
     return (cs ^ 0xFFFFFFFF);
+}
+
+/* Converts the string pointed to by from from UTF-8 format into UTF-16LE format
+ * and returns a pointer to the newly allocated buffer.
+ */
+const char* utf8ToUtf16LE(char *from) {
+    iconv_t conv = iconv_open("UTF-16LE", "UTF-8");
+    if (conv == (iconv_t)-1) {
+        perror("load_config:iconv_open");
+        exit(1);
+    }
+
+    size_t inbytes = (size_t) strlen(from);
+    size_t outbytes = inbytes * 2, avail = outbytes;
+    char *outbuf = (char*) malloc(outbytes), *outptr = outbuf;
+    memset(outbuf, 0, outbytes);
+
+    if (iconv(conv, &from, &inbytes, &outptr, &avail) == (size_t)-1) {
+        perror("load_config:iconv");
+        exit(1);
+    }
+    iconv_close(conv);
+
+    return outbuf;
 }
 
 unsigned RleEncode(unsigned char *src, unsigned char *dest, unsigned src_size)
