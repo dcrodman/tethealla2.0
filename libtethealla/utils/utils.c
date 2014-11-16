@@ -50,7 +50,7 @@ long calculate_checksum(void* data, unsigned long size)
  * and sets *to equal to the pointer to the newly allocated buffer. Returns the
  * number of bytes converted.
  */
-int utf8ToUtf16LE(char *from, char *to) {
+int utf8ToUtf16LE(char *from, char **to) {
     iconv_t conv = iconv_open("UTF-16LE", "UTF-8");
     if (conv == (iconv_t)-1) {
         perror("load_config:iconv_open");
@@ -58,19 +58,20 @@ int utf8ToUtf16LE(char *from, char *to) {
     }
 
     char *inbuf = from;
-    size_t inbytes = (size_t) strlen(from);
-    size_t outbytes = inbytes * 2, avail = outbytes;
-    char *outbuf = (char*) malloc(outbytes), *outptr = outbuf;
-    memset(outbuf, 0, outbytes);
+    size_t inbytesleft = (size_t) strlen(from);
+    size_t outbytesleft = inbytesleft * 2, avail = outbytesleft;
+    char *outbuf = (char*) malloc(outbytesleft), *outptr = outbuf;
+    memset(outbuf, 0, outbytesleft);
 
-    if (iconv(conv, &inbuf, &inbytes, &outptr, &avail) == (size_t)-1) {
+    if (iconv(conv, &inbuf, &inbytesleft, &outptr, &avail) == (size_t)-1) {
         perror("load_config:iconv");
         exit(1);
     }
-    iconv_close(conv);
-    to = outbuf;
 
-    return (outbytes - avail);
+    iconv_close(conv);
+    *to = outbuf;
+
+    return (outbytesleft - avail);
 }
 
 unsigned RleEncode(unsigned char *src, unsigned char *dest, unsigned src_size)

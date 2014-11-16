@@ -657,7 +657,7 @@ int load_config() {
 
     // The Welcome Message sent in PATCH_WELCOME_MESSAGE is expected to be encoded
     // as UTF-16 little endian, so it needs to be converted.
-    server_config->welcome_size = utf8ToUtf16LE(welcome_message, server_config->welcome_message);;
+    server_config->welcome_size = utf8ToUtf16LE(welcome_message, &(server_config->welcome_message));
 
     printf("Done!\n\n");
     return 0;

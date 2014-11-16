@@ -125,7 +125,7 @@ bool send_bb_client_message(login_client* client, const char* message) {
     pkt.header.type = LE16(BB_CLIENT_MSG);
     pkt.language_code = 0x00450009;
 
-    int message_size = utf8ToUtf16LE((char*)message, pkt.message);
+    int message_size = utf8ToUtf16LE((char*)message, &pkt.message);
     
     // Pad the packet until its length is divisible by 8.
     int pkt_len = 0x0C + message_size;
