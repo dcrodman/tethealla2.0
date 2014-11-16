@@ -107,10 +107,6 @@ int send_bb_login_welcome(login_client* client, uint8_t s_seed[48], uint8_t c_se
     strcpy(pkt.copyright, BB_COPYRIGHT);
     memcpy(pkt.server_vector, s_seed, 48);
     memcpy(pkt.client_vector, c_seed, 48);
-    
-    printf("Sending BB Login Welcome\n");
-    print_payload((unsigned char*)&pkt, BB_LOGIN_WELCOME_SZ);
-    printf("\n");
 
     return send_packet(client, &pkt, BB_LOGIN_WELCOME_SZ);
 }
@@ -556,7 +552,7 @@ handle:
     
 #ifdef DEBUGGING
     printf("Received %lu bytes from %s\n", bytes + BB_HEADER_LEN, client->IP_address);
-    print_payload(client->recv_buffer, int(bytes));
+    print_payload(client->recv_buffer, int(bytes + BB_HEADER_LEN));
     printf("\n");
 #endif
     

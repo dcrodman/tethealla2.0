@@ -96,7 +96,7 @@ void print_hex_ascii_line(const u_char *payload, int len, int offset) {
 	const u_char *ch;
     
 	/* offset */
-	printf("%05d   ", offset);
+	printf("%04X   ", offset);
     
 	/* hex */
 	ch = payload;

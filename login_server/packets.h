@@ -46,8 +46,8 @@ const char BB_COPYRIGHT[] = "Phantasy Star Online Blue Burst Game Server. Copyri
 
 #define BB_LOGIN_WELCOME_TYPE 0x03
 #define BB_LOGIN_WELCOME_SZ 0xC8
-#define BB_LOGIN_SZ 0xB4
 #define BB_LOGIN_TYPE 0x93
+#define BB_LOGIN_SZ 0xB4
 #define BB_SECURITY_TYPE 0xE6
 #define BB_SECURITY_SZ 0x44
 #define BB_CLIENT_MSG 0x1A
