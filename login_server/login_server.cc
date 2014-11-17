@@ -102,6 +102,7 @@ void log_mysql(log_type severity, const char *message) {
 /* Send the welcome packet to the client when they connect to the login server.*/
 int send_bb_login_welcome(login_client* client, uint8_t s_seed[48], uint8_t c_seed[48]) {
     bb_login_welcome_pkt pkt;
+    memset(&pkt, 0, sizeof(bb_login_welcome_pkt));
     pkt.header.type = LE16(BB_LOGIN_WELCOME_TYPE);
     pkt.header.length = LE16(BB_LOGIN_WELCOME_SZ);
     strcpy(pkt.copyright, BB_COPYRIGHT);
