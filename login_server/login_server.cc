@@ -525,16 +525,18 @@ int receive_from_client(login_client *client) {
         // Decrypt our header since we have all of it by now.
         CRYPT_CryptData(&client->client_cipher, client->recv_buffer, BB_HEADER_LEN, 0);
         header = (bb_packet_header*) client->recv_buffer;
-        client->packet_sz = header->length;
         
         // Skip ahead if all we got is an 8 byte header.
         if (client->packet_sz == BB_HEADER_LEN)
             goto handle;
     }
     
-    // Receive the rest of the packet (or as much as the client was able to send us).
-    bytes = recv(client->socket, client->recv_buffer + client->recv_size, client->packet_sz - client->recv_size, 0);
+    // Receive the rest of the packet (or as much as the client was able to send us). Note: a
+    // bugfix involved setting the client's packet size as 8 + received bytes instead of from
+    // the packet's header since the client likes to send extra bytes from time to time.
+    bytes = recv(client->socket, client->recv_buffer + client->recv_size, TCP_BUFFER_SIZE - client->recv_size, 0);
     client->recv_size += bytes;
+    client->packet_sz = BB_HEADER_LEN + bytes;
     
     if (bytes == -1) {
         perror("recv");
@@ -549,13 +551,13 @@ int receive_from_client(login_client *client) {
     }
     
     // By now we've received the whole packet.
-    CRYPT_CryptData(&client->client_cipher, client->recv_buffer + BB_HEADER_LEN, client->packet_sz - BB_HEADER_LEN, 0);
+    CRYPT_CryptData(&client->client_cipher, client->recv_buffer + BB_HEADER_LEN, client->recv_size - BB_HEADER_LEN, 0);
     
 handle:
     
 #ifdef DEBUGGING
-    printf("Received %lu bytes from %s\n", bytes + BB_HEADER_LEN, client->IP_address);
-    print_payload(client->recv_buffer, int(bytes + BB_HEADER_LEN));
+    printf("Received %d bytes from %s\n", client->recv_size, client->IP_address);
+    print_payload(client->recv_buffer, client->packet_sz);
     printf("\n");
 #endif
     
@@ -565,10 +567,9 @@ handle:
     } else {
         result = character_process_packet(client);
     }
-    
-    // Move the packet out of the recv buffer and reduce the currently received size.
-    client->recv_size -= client->packet_sz;
+
     memmove(client->recv_buffer, client->recv_buffer + client->packet_sz, client->packet_sz);
+    client->recv_size -= client->packet_sz;
     client->packet_sz = 0;
     
     if (result)
