@@ -167,7 +167,7 @@ bool send_bb_security(login_client* client, uint32_t team_id, uint32_t error) {
     printf("\n");
     
     CRYPT_CryptData(&client->server_cipher, &pkt, pkt_size, 1);
-    return send_packet(client, &pkt, pkt_size);
+    return send_packet(client, &pkt, pkt_size + 4);
 }
 
 /* Sends the redirect packet from the login server to indicate the IP
@@ -528,8 +528,10 @@ int receive_from_client(login_client *client) {
         header = (bb_packet_header*) client->recv_buffer;
         
         // Skip ahead if all we got is an 8 byte header.
-        if (client->packet_sz == BB_HEADER_LEN)
+        if (header->length == BB_HEADER_LEN) {
+            client->packet_sz = BB_HEADER_LEN;
             goto handle;
+        }
     }
     
     // Receive the rest of the packet (or as much as the client was able to send us). Note: a
@@ -569,7 +571,7 @@ handle:
         result = character_process_packet(client);
     }
 
-    memmove(client->recv_buffer, client->recv_buffer + client->packet_sz, client->packet_sz);
+    memset(client->recv_buffer, 0, client->recv_size);
     client->recv_size -= client->packet_sz;
     client->packet_sz = 0;
     
