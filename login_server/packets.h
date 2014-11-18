@@ -11,18 +11,6 @@
 
 #include "login_server.h"
 
-/* Borrowed from Sylverant for reversing byte order of packets. */
-#if defined(WORDS_BIGENDIAN) || defined(__BIG_ENDIAN__)
-    #define LE16(x) (((x >> 8) & 0xFF) | ((x & 0xFF) << 8))
-    #define LE32(x) (((x >> 24) & 0x00FF) | \
-        ((x >>  8) & 0xFF00) | \
-        ((x & 0xFF00) <<  8) | \
-        ((x & 0x00FF) << 24))
-#else
-    #define LE16(x) x
-    #define LE32(x) x
-#endif
-
 const char BB_COPYRIGHT[] = "Phantasy Star Online Blue Burst Game Server. Copyright 1999-2004 SONICTEAM.";
 
 /* Error codes for packet E6 */
@@ -40,20 +28,18 @@ const char BB_COPYRIGHT[] = "Phantasy Star Online Blue Burst Game Server. Copyri
 #define BB_LOGIN_ERROR_LOCKED      0x0000000A
 #define BB_LOGIN_ERROR_PATCH       0x0000000B
 
-/* Packet types and sizes. */
+/* Packet types. */
 
 #define BB_HEADER_LEN 8
 
-#define BB_LOGIN_WELCOME_TYPE 0x03
-#define BB_LOGIN_WELCOME_SZ 0xC8
-#define BB_LOGIN_TYPE 0x93
-#define BB_LOGIN_SZ 0xB4
-#define BB_SECURITY_TYPE 0xE6
-#define BB_SECURITY_SZ 0x44
+#define BB_LOGIN_WELCOME 0x03
+#define BB_LOGIN 0x93
+#define BB_SECURITY 0xE6
 #define BB_CLIENT_MSG 0x1A
-#define BB_REDIRECT_TYPE 0x19
-#define BB_REDIRECT_SZ 0x10
+#define BB_REDIRECT 0x19
 #define BB_LOGIN_DISCONNECT 0x05
+#define BB_LOGIN_TIME 0xB1
+#define BB_KEYBOARD_CONFIG 0xE2
 
 /* The BlueBurst header (8 bytes as opposed to 4). */
 struct bb_packet_header {

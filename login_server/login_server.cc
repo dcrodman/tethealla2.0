@@ -33,7 +33,6 @@ const char *CFG_NAME = "login_config.json";
 const char *LOCAL_DIR = "/usr/local/share/tethealla/config/";
 
 const char *PSO_CLIENT_VER_STRING = "TethVer12510";
-const int PSO_CLIENT_VER = 0x41;
 
 uint32_t normalName = 0xFFFFFFFF;
 uint32_t globalName = 0xFF1D94F7;
@@ -102,14 +101,15 @@ void log_mysql(log_type severity, const char *message) {
 /* Send the welcome packet to the client when they connect to the login server.*/
 int send_bb_login_welcome(login_client* client, uint8_t s_seed[48], uint8_t c_seed[48]) {
     bb_login_welcome_pkt pkt;
-    memset(&pkt, 0, sizeof(bb_login_welcome_pkt));
-    pkt.header.type = LE16(BB_LOGIN_WELCOME_TYPE);
-    pkt.header.length = LE16(BB_LOGIN_WELCOME_SZ);
+    size_t pkt_size = sizeof(bb_login_welcome_pkt);
+    memset(&pkt, 0, pkt_size);
+    pkt.header.type = BB_LOGIN_WELCOME;
+    pkt.header.length = pkt_size;
     strcpy(pkt.copyright, BB_COPYRIGHT);
     memcpy(pkt.server_vector, s_seed, 48);
     memcpy(pkt.client_vector, c_seed, 48);
 
-    return send_packet(client, &pkt, BB_LOGIN_WELCOME_SZ);
+    return send_packet(client, &pkt, pkt_size);
 }
 
 /* Sends the packet that will display a large message box to the user. Intended
@@ -119,7 +119,7 @@ int send_bb_login_welcome(login_client* client, uint8_t s_seed[48], uint8_t c_se
 */
 bool send_bb_client_message(login_client* client, const char* message) {
     bb_client_msg_pkt pkt;
-    pkt.header.type = LE16(BB_CLIENT_MSG);
+    pkt.header.type = BB_CLIENT_MSG;
     pkt.language_code = 0x00450009;
 
     int message_size = utf8ToUtf16LE((char*)message, &pkt.message);
@@ -130,7 +130,7 @@ bool send_bb_client_message(login_client* client, const char* message) {
         client->send_buffer[pkt_len++] = 0x00;
     }
 
-    pkt.header.length = LE16(pkt_len);
+    pkt.header.length = pkt_len;
 
     printf("Sending BB Client Message\n");
     print_payload((u_char*)&pkt, pkt_len);
@@ -150,9 +150,10 @@ bool send_bb_client_message(login_client* client, const char* message) {
  */
 bool send_bb_security(login_client* client, uint32_t team_id, uint32_t error) {
     bb_security_pkt pkt;
-    memset(&pkt, 0, BB_SECURITY_SZ);
-    pkt.header.type = LE16(BB_SECURITY_TYPE);
-    pkt.header.length = LE16(BB_SECURITY_SZ);
+    size_t pkt_size = sizeof(bb_security_pkt);
+    memset(&pkt, 0, pkt_size);
+    pkt.header.type = BB_SECURITY;
+    pkt.header.length = pkt_size;
 
     pkt.error_code = error;
     pkt.player_tag = 0x00010000;
@@ -162,11 +163,11 @@ bool send_bb_security(login_client* client, uint32_t team_id, uint32_t error) {
     pkt.clientconfig.magic = 0x48615467;
     
     printf("Sending BB Security Info\n");
-    print_payload((unsigned char*)&pkt, BB_SECURITY_SZ);
+    print_payload((unsigned char*)&pkt, pkt_size);
     printf("\n");
     
-    CRYPT_CryptData(&client->server_cipher, &pkt, BB_SECURITY_SZ, 1);
-    return send_packet(client, &pkt, BB_SECURITY_SZ + 4);
+    CRYPT_CryptData(&client->server_cipher, &pkt, pkt_size, 1);
+    return send_packet(client, &pkt, pkt_size);
 }
 
 /* Sends the redirect packet from the login server to indicate the IP
@@ -174,20 +175,19 @@ bool send_bb_security(login_client* client, uint32_t team_id, uint32_t error) {
  */
 bool send_bb_redirect(login_client* client, uint32_t ip, uint16_t port) {
     bb_redirect_pkt pkt;
-    memset(&pkt, 0, sizeof(bb_redirect_pkt));
-    pkt.header.type = LE16(BB_REDIRECT_TYPE);
-    pkt.header.length = LE16(BB_REDIRECT_SZ);
+    size_t pkt_size = sizeof(bb_redirect_pkt);
+    memset(&pkt, 0, pkt_size);
+    pkt.header.type = BB_REDIRECT;
+    pkt.header.length = pkt_size;
 
     pkt.ip_addr = ip;
-    pkt.port = LE16(port);
-    client->send_size += BB_REDIRECT_SZ;
+    pkt.port = port;
+    client->send_size += pkt_size;
 
     printf("Sending BB Redirect\n");
-    print_payload((u_char*) &pkt, BB_REDIRECT_SZ);
+    print_payload((u_char*) &pkt, pkt_size);
     printf("\n");
 
-    CRYPT_CryptData(&client->server_cipher, &pkt, BB_REDIRECT_SZ, 1);
-    return send_packet(client, &pkt, BB_REDIRECT_SZ);
 }
 
 /* Packet sent between ships to tell the other ships that this user logged on and
@@ -380,7 +380,7 @@ int handle_login_character(login_client *client) {
         }
         return status;
     }
-    // I have no idea what this is for, but everyone else seems to randomize it.
+    // I have no idea what this is for but everyone else seems to randomize it.
     uint32_t team_id = dist(rand_gen) << 16 | dist(rand_gen);
 
     return send_bb_security(client, team_id, BB_LOGIN_ERROR_NONE);
@@ -391,15 +391,15 @@ int handle_login_character(login_client *client) {
  */
 int login_process_packet(login_client* client) {
     bb_packet_header* header = (bb_packet_header*) client->recv_buffer;
-    header->type = LE16(header->type);
-    header->length = LE16(header->length);
+    header->type = header->type;
+    header->length = header->length;
 
     int result = 0;
     switch (header->type) {
         case BB_LOGIN_DISCONNECT:
             client->todc = true;
             break;
-        case BB_LOGIN_TYPE:
+        case BB_LOGIN:
             result = handle_login(client);
             if (!result) {
                 result = send_bb_redirect(client, server_config.server_ip_netp, server_config.character_port);
@@ -419,18 +419,19 @@ int login_process_packet(login_client* client) {
  */
 int character_process_packet(login_client* client) {
     bb_packet_header* header = (bb_packet_header*) client->recv_buffer;
-    header->type = LE16(header->type);
-    header->length = LE16(header->length);
+    header->type = header->type;
+    header->length = header->length;
     
     int result = 0;
     switch (header->type) {
         case BB_LOGIN_DISCONNECT:
             result = 1;
             break;
-        case BB_LOGIN_TYPE:
+        case BB_LOGIN:
             result = handle_login_character(client);
             if (!result) {
-                // send B1
+                // TODO: Figure out when these are sent (nonempty slot num?)
+                //send_time_packet(client);
                 // send A0
                 // send EE
             }
@@ -451,7 +452,7 @@ int character_process_packet(login_client* client) {
             // TODO
             break;
         case 0xE5:
-            // TODO: Create a character in a lot.
+            // TODO: Create a character in a slot.
             break;
         case 0xE8:
             // TODO
