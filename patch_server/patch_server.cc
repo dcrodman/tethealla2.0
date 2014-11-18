@@ -446,7 +446,7 @@ void handle_connections(int patchfd, int datafd) {
                 patch_client *client = accept_client(patchfd);
                 if (client) {
                     client->session = PATCH;
-                    printf("Accepted connection to PATCH from %s\n", client->ip_addr_str);
+                    printf("Accepted connection to PATCH from %s:%d\n", client->ip_addr_str, client->port);
                 }
             }
             if (FD_ISSET(datafd, &readfds)) {
@@ -454,7 +454,7 @@ void handle_connections(int patchfd, int datafd) {
                 patch_client *client = accept_client(datafd);
                 if (client) {
                     client->session = DATA;
-                    printf("Accepted connection to DATA from %s\n", client->ip_addr_str);
+                    printf("Accepted connection to DATA from %s:%d\n", client->ip_addr_str, client->port);
                 }
             }
             
@@ -477,6 +477,8 @@ void handle_connections(int patchfd, int datafd) {
 
                 // Disconnect the client if we've been waiting to close the connection.
                 if ((*c)->disconnected) {
+                    printf("Disconnected %s:%d from %s\n",
+                           (*c)->ip_addr_str, (*c)->port, ((*c)->session == PATCH) ? "PATCH" : "DATA");
                     destory_client(*c);
                     connections.erase(c++);
                 }
