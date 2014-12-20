@@ -57,9 +57,9 @@ const char* CFG_NAME = "patch_config.json";
 const char* LOCAL_DIR = "/usr/local/share/tethealla/config/";
 
 // Indicate which filenames should be skipped when looking for patches.
-const int NUM_SKIP_PATHS = 3;
+const int NUM_SKIP_PATHS = 4;
 const char* SKIP_PATHS[] = {
-  ".", "..", ".DS_Store"
+  ".", "..", ".DS_Store", ".rid"
 };
 
 // Patch data populated by load_patches().
