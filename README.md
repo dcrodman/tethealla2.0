@@ -1,6 +1,10 @@
 tethealla2.0
 ============
 
+**This project is no longer under active development. However the patch server component 
+is mostly stable and used for the recommended setup of the archon PSO server 
+(https://github.com/dcrodman/archon).**
+
 Continued development and port of Sodaboy's Tethealla PSOBB server to *nix systems. 
 Probably ought to rename this at some point as it's evolved into more of a complete 
 reimplementation, borrowing parts (and inspiration) from Tethealla, Newserv 
@@ -34,7 +38,7 @@ which can be compiled using GNU Make.
 
 To build the whole project from source:
 
-    git clone github-provided-url
+    git clone git@github.com:dcrodman/tethealla2.0.git
     cd tethealla2.0  
     mkdir build && cd build
     cmake ..
