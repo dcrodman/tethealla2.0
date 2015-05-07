@@ -723,11 +723,11 @@ int main(int argc, const char * argv[]) {
     chdir("..");
 
     printf("Loading patches from %s\n", server_config->patch_directory);
-    if (load_patches("patches/") == -1)
+    if (load_patches(server_config->patch_directory) == -1)
         exit(1);
     printf("Done!\n\n");
 
-    chdir(currentdir);
+//    chdir(currentdir);
 
     addrinfo hints;
     hints.ai_flags = AI_NUMERICHOST;
