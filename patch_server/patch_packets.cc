@@ -81,6 +81,12 @@ bool send_welcome(patch_client* client, uint32_t cvector, uint32_t svector) {
     w_pkt.server_vector = svector;
     w_pkt.client_vector = cvector;
 
+#ifdef DEBUGGING
+    printf("Sending welcome packet\n");
+    print_payload((u_char*) &w_pkt, w_pkt.header.pkt_len);
+    printf("\n");
+#endif
+
     client->send_size += PATCH_WELCOME_LENGTH;
     memcpy(client->send_buffer, &w_pkt, PATCH_WELCOME_LENGTH);
 
@@ -133,6 +139,12 @@ bool send_welcome_message(patch_client *client, packet_hdr *header,
     pkt_hdr->pkt_type = LE16(PATCH_WELCOME_MSG);
     pkt_hdr->pkt_len = LE16(pkt_size);
     client->send_size += pkt_size;
+    
+#ifdef DEBUGGING
+    printf("Sending welcome message\n");
+    print_payload((u_char*) &pkt_hdr, pkt_hdr->pkt_len);
+    printf("\n");
+#endif
 
     CRYPT_CryptData(&client->server_cipher, &client->send_buffer, pkt_size, 1);
 
